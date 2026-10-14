@@ -1,0 +1,201 @@
+$light: #272B30;
+$dark: #000000;
+
+$primary: #3E99F5;
+$secondary: #515960;
+$success: #6AC76A;
+$info: #64C3E0;
+$warning: #F99918;
+$danger: #EF6864;
+
+$white: #fff !default;
+$gray-100: #f8f9fa !default;
+$gray-200: #e9ecef !default;
+$gray-300: #dee2e6 !default;
+$gray-400: #ced4da !default;
+$gray-500: #adb5bd !default;
+$gray-600: #6c757d !default;
+$gray-700: #495057 !default;
+$gray-800: #343a40 !default;
+$gray-900: #212529 !default;
+$black: #000 !default;
+
+// Body background
+$body-bg: #272B30;
+
+// Table color
+$table-color: #e9ecef; // #272B30;
+$table-color-state: #e9ecef;
+
+// Override background colors
+$table-bg: #3A3F44;
+$card-bg: #3A3F44;
+$dropdown-bg: #515960;
+$modal-content-bg: #3A3F44;
+$modal-footer-bg: #3A3F44;
+$list-group-bg: #3A3F44;
+$card-cap-bg: #515960;
+
+// Logo height
+$navbar-brand-height: 3rem;
+
+// Fonts
+$font-size-base: 0.8rem;
+$font-family-sans-serif: "FontAwesome", "Open sans", Helvetica, Verdana, Arial, sans-serif;
+$font-family-monospace: "FontAwesome", Menlo, Monaco, Consolas, "Courier New", monospace;
+$body-color: #e9ecef;
+
+// Grid breakpoints
+$grid-breakpoints: (
+  xs: 0,
+  sm: 576px,
+  md: 768px,
+  lg: 1050px,
+  // Increased from the default 992px to account for the wide navbar
+  xl: 1200px,
+  xxl: 1400px,
+);
+
+$theme-colors: (
+  "primary": $primary,
+  "secondary": $secondary,
+  "success": $success,
+  "info": $info,
+  "warning": $warning,
+  "danger": $danger,
+  "light": $light,
+  "dark": $dark,
+  "gray": $gray-600,
+);
+
+// Specific for the dark theme
+$card-border-color: #555555;
+$tooltip-color: $black;
+$tooltip-bg: $white;
+$input-color: $body-color;
+$input-border-color: #333;
+$table-border-color: #555555;
+$nav-tabs-border-color: $secondary;
+$nav-tabs-link-hover-border-color: $body-bg;
+$navbar-light-hover-color: $body-color;
+$navbar-light-toggler-border-color: $body-color;
+$nav-tabs-link-active-color: $body-color;
+$dropdown-divider-bg: $gray-500;
+$min-contrast-ratio: 2.5;
+$input-group-addon-color: $body-color;
+$input-group-addon-bg: #515960;
+$link-opacity: 1;
+$jqgrid-header-bg: $table-bg;
+$card-cap-color: $body-color;
+
+.form-control {
+  color-scheme: dark;
+}
+
+input[type="text"].form-control:disabled {
+  background-color: $input-group-addon-bg;
+}
+
+.dropdown-toggle.form-control:disabled {
+  background-color: $input-group-addon-bg;
+}
+
+input[type="file"]::file-selector-button {
+  background-color: $input-group-addon-bg;
+}
+
+.related-lookup {
+  background-color: $body-color;
+  -webkit-mask-image: url(/static/admin/img/search.svg);
+  mask-image: url(/static/admin/img/search.svg);
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  mask-position: center;
+  background-image: none !important;
+}
+
+.table-striped>tbody>tr:nth-of-type(odd)>* {
+  // Disable striping
+  --bs-table-color-type: initial !important;
+  --bs-table-bg-type: transparent !important;
+}
+
+// You probably don't need to update the variables below this line.
+// These updates are normally generic for all frepple themes (with the exception of the dark theme)
+$accordion-bg: $card-bg;
+$accordion-btn-focus-border-color: #555555;
+$accordion-button-active-bg: $secondary;
+$accordion-button-active-color: $body-color;
+$accordion-button-bg: $secondary;
+$accordion-button-color: $body-color;
+$accordion-button-padding-y: 0.5rem;
+$accordion-border-color: #555555;
+$accordion-icon-active-color: $body-color;
+$breadcrumb-divider-color: $body-color;
+$breadcrumb-divider: "\00a0\00a0\F0DA\00a0\00a0";
+$breadcrumb-item-padding-x: 0.2rem;
+$card-title-spacer-y: 0;
+$dropdown-color: $body-color;
+$dropdown-link-active-bg: #272B30;
+$dropdown-link-active-color: $body-color;
+$dropdown-link-hover-bg: #272B30;
+$dropdown-link-hover-color: $body-color;
+$h1-font-size: $font-size-base * 1.5;
+$h2-font-size: $font-size-base * 1.25;
+$h3-font-size: $font-size-base * 1.25;
+$h4-font-size: $font-size-base * 1.25;
+$h5-font-size: $font-size-base * 1.25;
+$input-bg: #515960;
+$input-btn-focus-width: 2px;
+$link-color: $body-color;
+$link-decoration: none;
+$link-hover-color: $body-color;
+$link-hover-decoration: none;
+$navbar-light-color: $body-color;
+$nav-link-color: $body-color;
+$nav-tabs-border-radius: 0;
+$spacer: 1rem;
+
+// Colors for the graphs
+$frepple-color-backlog: #000000;
+$frepple-color-capacity-available: #8BBA00;
+$frepple-color-capacity-confirmed: lighten(#113C5E, 25%);
+$frepple-color-capacity-load: #AFD8F8;
+$frepple-color-capacity-overload: #FF0000;
+$frepple-color-capacity-setup: lighten(#2B95EC, 10%);
+$frepple-color-capacity-unavailable: #F6BD0F;
+$frepple-color-closed-orders: #828915;
+$frepple-color-consumed: #F6BD0F;
+$frepple-color-consumed-confirmed: #7B5E08;
+$frepple-color-demand-dependent: #7B5E08;
+$frepple-color-demand-local: #F6BD0F;
+$frepple-color-expiring: #000000;
+$frepple-color-forecast: #FF0000;
+$frepple-color-forecast-past: #FF7B00;
+$frepple-color-forecast-planned: #F6BD0F;
+$frepple-color-inventory: #8BBA00;
+$frepple-color-orders-open: #2B95EC;
+$frepple-color-orders-overdue: #FFC000;
+$frepple-color-orders-planned: #7B5E08;
+$frepple-color-produced: lighten(#2B95EC, 25%);
+$frepple-color-produced-confirmed: lighten(#113C5E, 25%);
+$frepple-color-reorder-quantity: #f47a00;
+$frepple-color-safetystock: #FF0000;
+$frepple-color-orders-total: #8BBA00;
+
+// Colors for the supply path
+$frepple-color-alternate-itemdistribution: #06b6d4;
+$frepple-color-alternate-operation: #60a5fa;
+$frepple-color-alternate-stroke: #475569;
+$frepple-color-buffer: #059669;
+$frepple-color-flow: $gray-500;
+$frepple-color-itemdistribution: #0ea5e9;
+$frepple-color-itemsupplier: #0d9488;
+$frepple-color-load: $gray-500;
+$frepple-color-operation: #2563eb;
+$frepple-color-resource: #f97316;
+$frepple-color-routing: #93c5fd;
+$frepple-color-routing-stroke: #64748b;
+$frepple-color-split: #0f172a;
+$frepple-color-split-stroke: #475569;

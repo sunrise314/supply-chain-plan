@@ -1,0 +1,886 @@
+#
+# Copyright (C) 2023-2026 by frePPLe bv
+#
+# Permission is hereby granted, free of charge, to any person obtaining
+# a copy of this software and associated documentation files (the
+# "Software"), to deal in the Software without restriction, including
+# without limitation the rights to use, copy, modify, merge, publish,
+# distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so, subject to
+# the following conditions:
+#
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+# LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+# WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+
+import frepple
+
+import asyncio
+from collections import OrderedDict
+import json
+
+from channels.db import database_sync_to_async
+from channels.generic.http import AsyncHttpConsumer
+from django.db import connections
+
+from freppledb.boot import getAttributes
+from freppledb.common.commands import PlanTaskRegistry
+from freppledb.common.localization import parseLocalizedDateTime, parseLocalizedDate
+from freppledb.input.models import OperationPlan
+from freppledb.webservice.utils import lock
+
+
+@database_sync_to_async
+def savePlan(
+    deleted_opplans,
+    related_opplans,
+    related_resources,
+    related_buffers,
+    related_demands,
+    database,
+    cluster,
+):
+    try:
+        PlanTaskRegistry.run(
+            export=1,
+            cluster=cluster,
+            database=database,
+            deleted_opplans=deleted_opplans,
+            opplans=related_opplans,
+            resources=related_resources,
+            buffers=related_buffers,
+            demands=related_demands,
+        )
+        with connections[database].cursor() as cursor:
+            # This query forces Postgres to finalize all pending WAL writes
+            cursor.execute("SELECT pg_current_wal_insert_lsn()")
+    except Exception as e:
+        print("Error saving plan:", e)
+        raise e
+
+
+def collectRelated(
+    opplan,
+    related_opplans,
+    related_resources,
+    related_buffers,
+    related_demands,
+):
+    for d in opplan.loadplans:
+        related_resources.add(d.resource)
+    for d in opplan.flowplans:
+        related_buffers.add(d.buffer)
+        for flpln in d.buffer.flowplans:
+            if flpln.operationplan not in related_opplans:
+                related_opplans.add(flpln.operationplan)
+    for c in opplan.operationplans:
+        if c not in related_opplans:
+            related_opplans.add(c)
+            collectRelated(
+                c,
+                related_opplans,
+                related_resources,
+                related_buffers,
+                related_demands,
+            )
+    if opplan.demand:
+        related_demands.add(opplan.demand)
+    if opplan.owner:
+        if opplan.owner not in related_opplans:
+            related_opplans.add(opplan.owner)
+            collectRelated(
+                opplan.owner,
+                related_opplans,
+                related_resources,
+                related_buffers,
+                related_demands,
+            )
+    for i in opplan.blockedby:
+        if i.first not in related_opplans:
+            related_opplans.add(i.first)
+            collectRelated(
+                i.first,
+                related_opplans,
+                related_resources,
+                related_buffers,
+                related_demands,
+            )
+    for i in opplan.blocking:
+        if i.second not in related_opplans:
+            related_opplans.add(i.second)
+            collectRelated(
+                i.second,
+                related_opplans,
+                related_resources,
+                related_buffers,
+                related_demands,
+            )
+
+
+opplanAttributes = [a for a in getAttributes(OperationPlan)]
+
+
+class OperationplanService(AsyncHttpConsumer):
+    msgtemplate = (
+        "<!doctype html>\n"
+        '<html lang="en">\n'
+        "<head>\n"
+        '<meta http-equiv="content-type" content="text/html; charset=utf-8">\n'
+        "</head>\n"
+        "<body>%s</body>\n"
+        "</html>\n"
+    )
+
+    def copyFields(self, opplan):
+        fields = {
+            "ordertype": opplan.ordertype,
+            "quantity": opplan.quantity,
+            "status": "proposed",
+            "start": opplan.start,
+        }
+        if fields["ordertype"] == "PO":
+            fields["location"] = opplan.location
+            fields["supplier"] = opplan.supplier
+            fields["item"] = opplan.item
+        elif fields["ordertype"] == "DO":
+            fields["location"] = opplan.location
+            fields["item"] = opplan.item
+            fields["origin"] = opplan.operation.origin
+        elif fields["ordertype"] in ("MO", "WO"):
+            fields["operation"] = opplan.operation
+        if opplan.remark:
+            fields["remark"] = opplan.remark
+        if opplan.demand:
+            fields["demand"] = opplan.demand
+        for attr in opplanAttributes:
+            if attr[0] != "forecast":
+                v = getattr(opplan, attr[0])
+                if attr[3] and v:
+                    fields[attr[0]] = v
+        return fields
+
+    async def handle(self, body):
+        errors = []
+        try:
+            if self.scope["method"] != "POST":
+                self.scope["response_headers"].append((b"Content-Type", b"text/html"))
+                await self.send_response(
+                    401,
+                    (self.msgtemplate % "Only POST requests allowed").encode(),
+                    headers=self.scope["response_headers"],
+                )
+                return
+
+            data = json.loads(body.decode("utf-8"))
+            opplans = []
+            deleted_opplans = set()
+            related_opplans = set()
+            related_resources = set()
+            related_buffers = set()
+            related_demands = set()
+
+            async with lock:
+                # Update the plan in memory
+                for rec in (
+                    data.get("operationplans", []) if isinstance(data, dict) else data
+                ):
+                    try:
+                        for d in rec.get("delete", []):
+                            if self.scope["user"].has_perm(
+                                "input.delete_operationplan"
+                            ):
+                                opplan = frepple.operationplan(reference=d, action="C")
+                                if not opplan:
+                                    continue
+                                if opplan.owner and isinstance(
+                                    opplan.owner.operation, frepple.operation_routing
+                                ):
+                                    opplan = opplan.owner
+                                collectRelated(
+                                    opplan,
+                                    related_opplans,
+                                    related_resources,
+                                    related_buffers,
+                                    related_demands,
+                                )
+                                deleted_opplans.add(opplan.reference)
+                                frepple.operationplan(
+                                    reference=opplan.reference, action="R"
+                                )
+                            elif "permission denied" not in errors:
+                                errors.append("permission denied")
+
+                        for d in rec.get("split", []):
+                            if self.scope["user"].has_perm(
+                                "input.create_operationplan"
+                            ):
+                                opplan = frepple.operationplan(reference=d, action="C")
+                                if not opplan:
+                                    continue
+                                if opplan.owner and isinstance(
+                                    opplan.owner.operation, frepple.operation_routing
+                                ):
+                                    opplan = opplan.owner
+                                quantity_orig = opplan.quantity
+                                related_opplans.add(opplan)
+                                collectRelated(
+                                    opplan,
+                                    related_opplans,
+                                    related_resources,
+                                    related_buffers,
+                                    related_demands,
+                                )
+                                opplan = frepple.operationplan(
+                                    reference=opplan.reference,
+                                    quantity=quantity_orig / 2,
+                                    startdate=opplan.start,
+                                )
+                                if opplan.quantity < quantity_orig:
+                                    fields = self.copyFields(opplan)
+                                    fields["quantity"] = quantity_orig - opplan.quantity
+                                    opplans.append(frepple.operationplan(**fields))
+                            elif "permission denied" not in errors:
+                                errors.append("permission denied")
+
+                        for d in rec.get("copy", []):
+                            if self.scope["user"].has_perm(
+                                "input.create_operationplan"
+                            ):
+                                opplan = frepple.operationplan(reference=d, action="C")
+                                if not opplan:
+                                    continue
+                                if opplan.owner and isinstance(
+                                    opplan.owner.operation, frepple.operation_routing
+                                ):
+                                    opplan = opplan.owner
+                                collectRelated(
+                                    opplan,
+                                    related_opplans,
+                                    related_resources,
+                                    related_buffers,
+                                    related_demands,
+                                )
+                                fields = self.copyFields(opplan)
+                                opplans.append(frepple.operationplan(**fields))
+
+                        # Build arguments
+                        rsrcs_by_ref = None
+                        changes = OrderedDict()
+                        ref = rec.get(
+                            "operationplan__reference",
+                            rec.get(
+                                "operationplan__id",
+                                rec.get("reference", rec.get("id", None)),
+                            ),
+                        )
+                        if not ref:
+                            continue
+                        changes["reference"] = ref
+                        opplan = frepple.operationplan(reference=ref, action="C")
+                        changes["ordertype"] = opplan.ordertype
+                        if changes["ordertype"] == "PO":
+                            if "location" in rec:
+                                changes["location"] = frepple.location(
+                                    name=rec["location"], action="C"
+                                )
+                            if "supplier" in rec:
+                                changes["supplier"] = frepple.supplier(
+                                    name=rec["supplier"], action="C"
+                                )
+                            if "item" in rec:
+                                changes["item"] = frepple.item(
+                                    name=rec["item"], action="C"
+                                )
+                        elif changes["ordertype"] == "DO":
+                            if "destination" in rec:
+                                changes["location"] = frepple.location(
+                                    name=rec["destination"], action="C"
+                                )
+                            if "origin" in rec:
+                                changes["origin"] = frepple.location(
+                                    name=rec["origin"], action="C"
+                                )
+                            if "item" in rec:
+                                changes["item"] = frepple.item(
+                                    name=rec["item"], action="C"
+                                )
+                        elif changes["ordertype"] == "MO":
+                            if "operation" in rec:
+                                changes["operation"] = frepple.operation(
+                                    name=rec["operation"], action="C"
+                                )
+                        if "operationplan__quantity" in rec:
+                            changes["quantity"] = float(rec["operationplan__quantity"])
+                        elif "quantity" in rec:
+                            changes["quantity"] = float(rec["quantity"])
+                        if "operationplan__quantity_completed" in rec:
+                            changes["quantity_completed"] = float(
+                                rec["operationplan__quantity_completed"]
+                            )
+                        elif "quantity_completed" in rec:
+                            changes["quantity_completed"] = float(
+                                rec["quantity_completed"]
+                            )
+                        if "enddate" in rec and rec["enddate"] != "\xa0":
+                            changes["end"] = parseLocalizedDateTime(
+                                rec["enddate"]
+                            ).strftime("%Y-%m-%dT%H:%M:%S")
+                        elif (
+                            "operationplan__enddate" in rec
+                            and rec["operationplan__enddate"] != "\xa0"
+                        ):
+                            changes["end"] = parseLocalizedDateTime(
+                                rec["operationplan__enddate"]
+                            ).strftime("%Y-%m-%dT%H:%M:%S")
+                        if "startdate" in rec and rec["startdate"] != "\xa0":
+                            changes["start"] = parseLocalizedDateTime(
+                                rec["startdate"]
+                            ).strftime("%Y-%m-%dT%H:%M:%S")
+                        elif (
+                            "operationplan__startdate" in rec
+                            and rec["operationplan__startdate"] != "\xa0"
+                        ):
+                            changes["start"] = parseLocalizedDateTime(
+                                rec["operationplan__startdate"]
+                            ).strftime("%Y-%m-%dT%H:%M:%S")
+                        if "demand" in rec:
+                            changes["demand"] = rec["demand"]
+                        if "batch" in rec:
+                            changes["batch"] = rec["batch"]
+                        if "status" in rec:
+                            changes["status"] = rec["status"]
+                        elif "operationplan__status" in rec:
+                            changes["status"] = rec["operationplan__status"]
+                        rsrcs = rec.get("resources", rec.get("resource", None))
+                        if rsrcs:
+                            # Force deletion of existing loadplans (because the loadplan data isn't in delta mode)
+                            if isinstance(rsrcs, str):
+                                changes["resources"] = [rsrcs]
+                            else:
+                                rsrcs_by_ref = {}
+                                for l in rsrcs:
+                                    if l[2] in rsrcs_by_ref:
+                                        rsrcs_by_ref[l[2]].append(l[0])
+                                    else:
+                                        rsrcs_by_ref[l[2]] = [l[0]]
+                                if changes.get("reference", None) in rsrcs_by_ref:
+                                    changes["resources"] = rsrcs_by_ref[
+                                        changes["reference"]
+                                    ]
+                                    del rsrcs_by_ref[changes["reference"]]
+                        if "remark" in rec:
+                            changes["remark"] = rec["remark"]
+                        for attr in opplanAttributes:
+                            if attr[0] in rec and attr[3]:
+                                if attr[2] in ("integer", "number"):
+                                    changes[attr[0]] = float(rec[attr[0]])
+                                elif attr[2] == "datetime":
+                                    changes[attr[0]] = parseLocalizedDateTime(
+                                        rec[attr[0]]
+                                    ).strftime("%Y-%m-%dT%H:%M:%S")
+                                elif attr[2] == "date":
+                                    changes[attr[0]] = parseLocalizedDate(
+                                        rec[attr[0]]
+                                    ).strftime("%Y-%m-%d")
+                                else:
+                                    changes[attr[0]] = rec[attr[0]]
+
+                        # Update the engine
+                        if changes or rsrcs_by_ref:
+                            if self.scope["user"].has_perm(
+                                "input.change_operationplan"
+                                if ref
+                                else "input.add_operationplan"
+                            ):
+                                if ref:
+                                    # Original related objects
+                                    opplans.append(opplan)
+                                    collectRelated(
+                                        opplan,
+                                        related_opplans,
+                                        related_resources,
+                                        related_buffers,
+                                        related_demands,
+                                    )
+                                    # Update children
+                                    if rsrcs_by_ref:
+                                        for child_ref, res in rsrcs_by_ref.items():
+                                            child_opplan = frepple.operationplan(
+                                                reference=child_ref, action="C"
+                                            )
+                                            collectRelated(
+                                                child_opplan,
+                                                related_opplans,
+                                                related_resources,
+                                                related_buffers,
+                                                related_demands,
+                                            )
+                                            child_opplan = frepple.operationplan(
+                                                reference=child_ref,
+                                                resources=res,
+                                                action="C",
+                                            )
+                                            collectRelated(
+                                                child_opplan,
+                                                related_opplans,
+                                                related_resources,
+                                                related_buffers,
+                                                related_demands,
+                                            )
+                                    # Update
+                                    changes["action"] = "C"
+                                    opplan = frepple.operationplan(**changes)
+                                    if "end" in changes:
+                                        opplan.end_force = changes["end"]
+                                    if "start" in changes:
+                                        opplan.start_force = changes["start"]
+                                else:
+                                    opplan = frepple.operationplan(**changes)
+                                    for fld, val in changes.items():
+                                        if fld == "end":
+                                            setattr(opplan, "end_force", val)
+                                        elif fld == "start":
+                                            setattr(opplan, "start_force", val)
+                                        elif fld != "reference":
+                                            setattr(opplan, fld, val)
+                                # New related objects
+                                related_opplans.add(opplan)
+                                collectRelated(
+                                    opplan,
+                                    related_opplans,
+                                    related_resources,
+                                    related_buffers,
+                                    related_demands,
+                                )
+                            elif "permission denied" not in errors:
+                                errors.append("permission denied")
+
+                    except Exception as e:
+                        errors.append(str(e))
+
+                # Save all changes
+                if (
+                    deleted_opplans
+                    or related_opplans
+                    or related_resources
+                    or related_buffers
+                    or related_demands
+                ):
+                    try:
+                        await savePlan(
+                            list(deleted_opplans),
+                            related_opplans,
+                            related_resources,
+                            related_buffers,
+                            related_demands,
+                            self.scope["database"],
+                            -2,
+                        )
+                        deleted_opplans = None
+                        related_opplans = None
+                        related_resources = None
+                        related_buffers = None
+                        related_demands = None
+                    except Exception as e:
+                        errors.append("Error saving plan")
+                        print(f"Error saving plan: {e}")
+
+            self.scope["response_headers"].append((b"Content-Type", b"text/html"))
+            await asyncio.sleep(0.01)  # Allow event loop to clear pending events
+            if errors:
+                await self.send_response(
+                    500,
+                    json.dumps({"errors": errors}).encode(),
+                    headers=self.scope["response_headers"],
+                )
+            else:
+                await self.send_response(
+                    200,
+                    b'{"OK": 1}',
+                    headers=self.scope["response_headers"],
+                )
+        except Exception as e:
+            print("exception " % e)
+            await self.send_response(
+                500,
+                b"Error updating operationplans",
+                headers=self.scope["response_headers"],
+            )
+
+
+class SupplyPathSvc(AsyncHttpConsumer):
+    msgtemplate = (
+        "<!doctype html>\n"
+        '<html lang="en">\n'
+        "<head>\n"
+        '<meta http-equiv="content-type" content="text/html; charset=utf-8">\n'
+        "</head>\n"
+        "<body>%s</body>\n"
+        "</html>\n"
+    )
+
+    operation_dict = {
+        "operation_routing": "routing",
+        "operation_itemdistribution": "distribution",
+        "operation_itemsupplier": "purchase",
+        "operation_time_per": "time_per",
+        "operation_fixed_time": "fixed_time",
+        "operation_alternate": "alternate",
+    }
+
+    def format_seconds(self, seconds):
+        if seconds is None:
+            return None
+        elif seconds == 0:
+            return "00:00:00"
+        days = seconds // 86400
+        hours = (seconds % 86400) // 3600
+        minutes = (seconds % 3600) // 60
+        secs = seconds % 60
+
+        return f"{days} {hours:02}:{minutes:02}:{secs:02}"
+
+    def recurseOperations(
+        self, op, depth, real_depth, quantity, results, upstream, parent_id
+    ):
+        # Avoid duplicates
+        operation_name = (
+            f"Purchase {op.buffer.item.name} @ {op.buffer.location.name} from {op.itemsupplier.supplier.name}"
+            if isinstance(op, frepple.operation_itemsupplier)
+            else (
+                f"Ship {op.origin.item.name} from {op.origin.location.name} to {op.destination.location.name}"
+                if isinstance(op, frepple.operation_itemdistribution)
+                else op.name
+            )
+        )
+        if any(o["operation"] == operation_name for o in results):
+            return
+
+        # Add the current operation to the result list
+        id = len(results) + 1
+        if not op.hidden or isinstance(
+            op, (frepple.operation_itemsupplier, frepple.operation_itemdistribution)
+        ):
+            suboperation_index = 0
+            suboperation_priority = 0
+            if op.owner:
+                for i in op.owner.suboperations:
+                    suboperation_index += 1
+                    if i.operation.name == op.name:
+                        suboperation_priority = i.priority
+                        break
+
+            v = {
+                "depth": depth,
+                "id": id,
+                "operation": operation_name,
+                "priority": suboperation_priority or op.priority,
+                "type": self.operation_dict[op.__class__.__name__],
+                "item": (
+                    op.buffer.item.name
+                    if isinstance(op, frepple.operation_itemsupplier)
+                    else (
+                        op.origin.item.name
+                        if isinstance(op, frepple.operation_itemdistribution)
+                        else (op.item.name if op.item else None)
+                    )
+                ),
+                "description": (
+                    op.buffer.item.description
+                    if isinstance(op, frepple.operation_itemsupplier)
+                    else (
+                        op.origin.item.description
+                        if isinstance(op, frepple.operation_itemdistribution)
+                        else (
+                            op.item.description
+                            if op.item
+                            else (
+                                op.owner.item.description
+                                if op.owner and op.owner.item
+                                else None
+                            )
+                        )
+                    )
+                ),
+                "uom": (
+                    op.buffer.item.uom
+                    if isinstance(op, frepple.operation_itemsupplier)
+                    else (
+                        op.origin.item.uom
+                        if isinstance(op, frepple.operation_itemdistribution)
+                        else (
+                            op.item.uom
+                            if op.item
+                            else (
+                                op.owner.item.uom
+                                if op.owner and op.owner.item
+                                else None
+                            )
+                        )
+                    )
+                ),
+                "location": op.location.name if op.location else None,
+                "resources": sorted((l.resource.name, l.quantity) for l in op.loads)
+                or None,
+                "parentoper": (
+                    op.owner.name if op.owner and not op.owner.hidden else None
+                ),
+                "suboperation": (
+                    suboperation_index if op.owner and not op.owner.hidden else 0
+                ),
+                "duration": self.format_seconds(
+                    op.itemdistribution.leadtime
+                    if isinstance(op, frepple.operation_itemdistribution)
+                    else getattr(op, "duration", None)
+                ),
+                "duration_per": self.format_seconds(getattr(op, "duration_per", None)),
+                "quantity": quantity,
+                "buffers": sorted(
+                    (
+                        fl.buffer.name,
+                        fl.quantity,
+                        (
+                            "infinite"
+                            if isinstance(fl.buffer, frepple.buffer_infinite)
+                            else "default"
+                        ),
+                    )
+                    for fl in op.flows
+                )
+                or None,
+                "parent": parent_id,
+                "leaf": "false" if op.owner else None,
+                "expanded": "true",
+                "numsuboperations": (
+                    len(list(c for c in op.suboperations))
+                    if isinstance(
+                        op,
+                        (
+                            frepple.operation_routing,
+                            frepple.operation_alternate,
+                            frepple.operation_split,
+                        ),
+                    )
+                    else 0
+                ),
+                "realdepth": real_depth,
+                "sizeminimum": op.size_minimum,
+                "sizemaximum": op.size_maximum if op.size_maximum < 1e20 else None,
+                "sizemultiple": op.size_multiple,
+                "alternate": (
+                    "true"
+                    if op.owner
+                    and isinstance(op.owner, frepple.operation_alternate)
+                    and len(
+                        [k for k in op.owner.suboperations if k.priority < op.priority]
+                    )
+                    > 0
+                    else "false"
+                ),
+                "blockedby": [[d.blockedby.name, d.quantity] for d in op.blockedby],
+                "blocking": [[d.operation.name, d.quantity] for d in op.blocking],
+            }
+            if parent_id:
+                v["alternate_priority"] = op.priority
+                v["alternate_operation"] = op.owner.name if op.owner else None
+            results.append(v)
+        else:
+            depth -= 1 if isinstance(op, frepple.operation_alternate) else 2
+            real_depth -= 2
+
+        # Recurse to the next level: flows
+        for fl in sorted(
+            op.flows,
+            key=lambda f: (f.quantity < 0 or f.quantity_fixed < 0, f.buffer.item.name),
+            reverse=True,
+        ):
+            if (
+                upstream
+                and (fl.quantity < 0 or fl.quantity_fixed < 0)
+                and fl.buffer.producing
+            ):
+
+                self.recurseOperations(
+                    fl.buffer.producing,
+                    (depth + 1 if op.owner and not op.owner.hidden else 2 + depth),
+                    max(real_depth + 1, 0),
+                    -quantity * fl.quantity,
+                    results,
+                    upstream,
+                    id,
+                )
+            elif not upstream and (fl.quantity > 0 or fl.quantity_fixed > 0):
+                for fl2 in fl.buffer.flows:
+                    if fl2.quantity < 0 or fl2.quantity_fixed < 0:
+                        o = fl2.operation
+                        if o.owner and isinstance(o.owner, frepple.operation_routing):
+                            o = o.owner
+                        if o.priority != 0:
+                            self.recurseOperations(
+                                fl2.operation,
+                                (
+                                    depth + 1
+                                    if op.owner and not op.owner.hidden
+                                    else 2 + depth
+                                ),
+                                max(real_depth + 1, 0),
+                                -quantity * fl.quantity * fl2.quantity,
+                                results,
+                                upstream,
+                                id,
+                            )
+
+        # Recurse to the next level: suboperations
+        if isinstance(
+            op,
+            (
+                frepple.operation_routing,
+                frepple.operation_alternate,
+                frepple.operation_split,
+            ),
+        ):
+            for c in op.suboperations:
+                if not (
+                    isinstance(op, frepple.operation_alternate)
+                    and c.operation.priority == 0
+                ):
+                    self.recurseOperations(
+                        c.operation,
+                        depth + 1,  # This is a suboperation, only one level extra
+                        max(real_depth, 0),  # Doesn't increase for suboperations
+                        quantity,
+                        results,
+                        upstream,
+                        id if isinstance(op, frepple.operation_routing) else parent_id,
+                    )
+
+        # Recurse to the next level: dependencies
+        for d in op.blockedby if upstream else op.blocking:
+            self.recurseOperations(
+                d.blockedby if upstream else d.operation,
+                (depth + 1 if op.owner and not op.owner.hidden else 2 + depth),
+                max(real_depth + 1, 0),
+                quantity * d.quantity,
+                results,
+                upstream,
+                id,
+            )
+
+    async def handle(self, body):
+        try:
+            model = self.scope["url_route"]["kwargs"].get("model", None)
+            name = self.scope["url_route"]["kwargs"].get("name", None)
+            upstream = self.scope["path"].startswith("/supplypath/")
+
+            # No permission check needed here, because this url is only exposed internally.
+
+            # Find set of operations to start with
+            operations = []
+            try:
+                if model == "item":
+                    it = frepple.item(name=name, action="C")
+                    if it:
+                        if upstream:
+                            operations.extend(buf.producing for buf in it.buffers)
+                        else:
+                            for buf in it.buffers:
+                                for fl in buf.flows:
+                                    if fl.quantity < 0 or fl.quantity_fixed < 0:
+                                        o = fl.operation
+                                        if o.owner and isinstance(
+                                            o.owner, frepple.operation_routing
+                                        ):
+                                            o = o.owner
+                                        if o.priority != 0:
+                                            operations.append(o)
+                elif model == "operation":
+                    oper = frepple.operation(name=name, action="C")
+                    if oper:
+                        operations.append(oper)
+                elif model == "resource":
+                    res = frepple.resource(name=name, action="C")
+                    if res:
+                        operations.extend(l.operation for l in res.loads)
+                elif model == "buffer":
+                    buf = frepple.buffer(name=name, action="C")
+                    if buf:
+                        operations.append(buf.producing)
+                elif model in ("demand", "forecast"):
+                    demand = frepple.demand(name=name, action="C")
+                    if demand:
+                        if demand.operation:
+                            operations.append(demand.operation)
+                        elif demand.item and demand.location:
+                            operations.append(
+                                frepple.buffer(
+                                    name=f"{demand.item.name} @ {demand.location.name}"
+                                ).producing
+                            )
+            except Exception:
+                # Ignore "object not found" exceptions
+                pass
+
+            if not operations:
+                self.scope["response_headers"].append((b"Content-Type", b"text/html"))
+                await self.send_response(
+                    404,
+                    (self.msgtemplate % "Not found").encode(),
+                    headers=self.scope["response_headers"],
+                )
+                return
+
+            # Recursively collect all operations
+            results = []
+            self.operation_dict = {
+                "operation_routing": "routing",
+                "operation_itemdistribution": "distribution",
+                "operation_itemsupplier": "purchase",
+                "operation_time_per": "time_per",
+                "operation_fixed_time": "fixed_time",
+                "operation_alternate": "alternate",
+            }
+            for o in operations:
+                self.recurseOperations(o, 0, 0, 1.0, results, upstream, None)
+
+            # Post-process results to calculate leaf field
+            parents = [i["parent"] for i in results if i["parent"]]
+            for i in results:
+                if i["type"] in [
+                    "time_per",
+                    "fixed_time",
+                    "purchase",
+                    "distribution",
+                ]:
+                    i["leaf"] = "true" if i["id"] not in parents else "false"
+                else:
+                    i["leaf"] = "false"
+
+            # Return the result
+            self.scope["response_headers"].append(
+                (b"Content-Type", b"application/json")
+            )
+            await self.send_response(
+                200,
+                json.dumps(results).encode(),
+                headers=self.scope["response_headers"],
+            )
+
+        except Exception as e:  # TEMP for debugging
+            import traceback
+
+            traceback.print_exc()
+            print("exception " % e)
+            self.scope["response_headers"].append((b"Content-Type", b"text/html"))
+            await self.send_response(
+                500,
+                (self.msgtemplate % "Error retrieving supply path").encode(),
+                headers=self.scope["response_headers"],
+            )

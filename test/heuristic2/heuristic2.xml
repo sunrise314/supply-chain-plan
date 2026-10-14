@@ -1,0 +1,1570 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plan xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <current>2027-01-01T00:00:00</current>
+
+  <!--
+  1. simple backward-forward case with material coordination and lead time constraints.
+  Results identical to the old solver.
+  -->
+  <locations>
+    <location name="1. factory">
+      <available name="1. Working Days">
+        <default>1</default>
+      </available>
+    </location>
+  </locations>
+  <demands>
+    <demand name="1. Demand 1">
+      <customer name="Average Joe" />
+      <location name="1. factory" />
+      <quantity>100</quantity>
+      <minshipment>1</minshipment>
+      <item name="1. level 0" />
+      <due>2027-01-01T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="1. Demand 2">
+      <customer name="Average Joe" />
+      <location name="1. factory" />
+      <quantity>100</quantity>
+      <minshipment>1</minshipment>
+      <item name="1. level 0" />
+      <due>2027-01-05T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="1. Demand 3">
+      <customer name="Average Joe" />
+      <location name="1. factory" />
+      <quantity>30</quantity>
+      <minshipment>1</minshipment>
+      <item name="1. level 0" />
+      <due>2027-04-01T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="1. Demand 4">
+      <customer name="Average Joe" />
+      <location name="1. factory" />
+      <quantity>30</quantity>
+      <minshipment>1</minshipment>
+      <item name="1. level 0" />
+      <due>2027-04-07T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="1. Demand 5">
+      <customer name="Average Joe" />
+      <location name="1. factory" />
+      <quantity>30</quantity>
+      <minshipment>1</minshipment>
+      <item name="1. level 0" />
+      <due>2027-04-15T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+  </demands>
+  <operations>
+    <operation name="1. Make level 0" xsi:type="operation_fixed_time">
+      <item name="1. level0" />
+      <location name="1. factory" />
+      <batchwindow>P10D</batchwindow>
+      <duration>P1D</duration>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="1. level 0" />
+          <quantity>1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="1. level 1a" />
+          <quantity>-1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="1. level 1b" />
+          <quantity>-1</quantity>
+        </flow>
+      </flows>
+    </operation>
+    <operation name="1. Make level 1a" xsi:type="operation_fixed_time">
+      <item name="1. level 1a" />
+      <location name="1. factory" />
+      <batchwindow>P10D</batchwindow>
+      <duration>P1D</duration>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="1. level 1a" />
+          <quantity>1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="1. level 2a" />
+          <quantity>-1</quantity>
+        </flow>
+      </flows>
+    </operation>
+    <operation name="1. Make level 1b" xsi:type="operation_fixed_time">
+      <item name="1. level 1b" />
+      <location name="1. factory" />
+      <batchwindow>P10D</batchwindow>
+      <duration>P5D</duration>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="1. level 1b" />
+          <quantity>1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="1. level 2b" />
+          <quantity>-1</quantity>
+        </flow>
+      </flows>
+    </operation>
+    <operation name="1. Make level 2b" xsi:type="operation_fixed_time">
+      <item name="1. level 2b" />
+      <location name="1. factory" />
+      <batchwindow>P10D</batchwindow>
+      <duration>P1D</duration>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="1. level 2b" />
+          <quantity>1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="1. level 3b" />
+          <quantity>-1</quantity>
+        </flow>
+      </flows>
+    </operation>
+    <operation name="1. Make level 3b" xsi:type="operation_fixed_time">
+      <item name="1. level 3b" />
+      <location name="1. factory" />
+      <batchwindow>P10D</batchwindow>
+      <duration>P1D</duration>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="1. level 3b" />
+          <quantity>1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="1. level 4b" />
+          <quantity>-1</quantity>
+        </flow>
+      </flows>
+    </operation>
+    <operation name="1. Make level 4b" xsi:type="operation_fixed_time">
+      <item name="1. level 4b" />
+      <location name="1. factory" />
+      <batchwindow>P200D</batchwindow>
+      <duration>P4D</duration>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="1. level 4b" />
+          <quantity>1</quantity>
+        </flow>
+      </flows>
+    </operation>
+  </operations>
+  <items>
+    <item name="1. level 2a">
+      <itemsuppliers>
+        <itemsupplier>
+          <batchwindow>P10D</batchwindow>
+          <supplier name="MySupplier" />
+          <location name="1. factory" />
+          <leadtime>P7D</leadtime>
+          <priority>1</priority>
+        </itemsupplier>
+      </itemsuppliers>
+    </item>
+  </items>
+
+  <!--
+  2. same as 1, but different batch windows.
+  Results identical to the old solver.
+  -->
+  <locations>
+    <location name="2. factory">
+      <available name="2. Working Days">
+        <default>1</default>
+      </available>
+    </location>
+  </locations>
+  <demands>
+    <demand name="2. Demand 1">
+      <customer name="Average Joe" />
+      <location name="2. factory" />
+      <quantity>100</quantity>
+      <minshipment>1</minshipment>
+      <item name="2. level 0" />
+      <due>2027-01-01T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="2. Demand 2">
+      <customer name="Average Joe" />
+      <location name="2. factory" />
+      <quantity>100</quantity>
+      <minshipment>1</minshipment>
+      <item name="2. level 0" />
+      <due>2027-01-05T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="2. Demand 3">
+      <customer name="Average Joe" />
+      <location name="2. factory" />
+      <quantity>30</quantity>
+      <minshipment>1</minshipment>
+      <item name="2. level 0" />
+      <due>2027-04-01T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="2. Demand 4">
+      <customer name="Average Joe" />
+      <location name="2. factory" />
+      <quantity>30</quantity>
+      <minshipment>1</minshipment>
+      <item name="2. level 0" />
+      <due>2027-04-07T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="2. Demand 5">
+      <customer name="Average Joe" />
+      <location name="2. factory" />
+      <quantity>30</quantity>
+      <minshipment>1</minshipment>
+      <item name="2. level 0" />
+      <due>2027-04-15T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+  </demands>
+  <operations>
+    <operation name="2. Make level 0" xsi:type="operation_fixed_time">
+      <item name="2. level 0" />
+      <location name="2. factory" />
+      <batchwindow>P10D</batchwindow>
+      <duration>P1D</duration>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="2. level 0" />
+          <quantity>1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="2. level 1a" />
+          <quantity>-1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="2. level 1b" />
+          <quantity>-1</quantity>
+        </flow>
+      </flows>
+    </operation>
+    <operation name="2. Make level 1a" xsi:type="operation_fixed_time">
+      <item name="2. level 1a" />
+      <location name="2. factory" />
+      <batchwindow>P10D</batchwindow>
+      <duration>P1D</duration>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="2. level 1a" />
+          <quantity>1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="2. level 2a" />
+          <quantity>-1</quantity>
+        </flow>
+      </flows>
+    </operation>
+    <operation name="2. Make level 1b" xsi:type="operation_fixed_time">
+      <item name="2. level 1b" />
+      <location name="2. factory" />
+      <batchwindow>P10D</batchwindow>
+      <duration>P5D</duration>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="2. level 1b" />
+          <quantity>1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="2. level 2b" />
+          <quantity>-1</quantity>
+        </flow>
+      </flows>
+    </operation>
+    <operation name="2. Make level 2b" xsi:type="operation_fixed_time">
+      <item name="2. level 2b" />
+      <location name="2. factory" />
+      <batchwindow>P80D</batchwindow>
+      <duration>P1D</duration>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="2. level 2b" />
+          <quantity>1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="2. level 3b" />
+          <quantity>-1</quantity>
+        </flow>
+      </flows>
+    </operation>
+    <operation name="2. Make level 3b" xsi:type="operation_fixed_time">
+      <item name="2. level 3b" />
+      <location name="2. factory" />
+      <batchwindow>P10D</batchwindow>
+      <duration>P1D</duration>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="2. level 3b" />
+          <quantity>1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="2. level 4b" />
+          <quantity>-1</quantity>
+        </flow>
+      </flows>
+    </operation>
+    <operation name="2. Make level 4b" xsi:type="operation_fixed_time">
+      <item name="2. level 4b" />
+      <location name="2. factory" />
+      <batchwindow>P200D</batchwindow>
+      <duration>P4D</duration>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="2. level 4b" />
+          <quantity>1</quantity>
+        </flow>
+      </flows>
+    </operation>
+  </operations>
+  <items>
+    <item name="2. level 2a">
+      <itemsuppliers>
+        <itemsupplier>
+          <batchwindow>P10D</batchwindow>
+          <supplier name="MySupplier" />
+          <location name="2. factory" />
+          <leadtime>P7D</leadtime>
+          <priority>1</priority>
+        </itemsupplier>
+      </itemsuppliers>
+    </item>
+  </items>
+
+  <!--
+  3. Same as 1, but with time_per operations.
+  Planning results show more delay compared to the old solver, but this expected
+  and normal. The old solver plans smaller manufacturing orders in parallel, which the
+  new solver doesn't.
+  -->
+  <locations>
+    <location name="3. factory">
+      <available name="3. Working Days">
+        <default>1</default>
+      </available>
+    </location>
+  </locations>
+  <demands>
+    <demand name="3. Demand 1">
+      <customer name="Average Joe" />
+      <location name="3. factory" />
+      <quantity>100</quantity>
+      <minshipment>1</minshipment>
+      <item name="3. level 0" />
+      <due>2027-01-01T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="3. Demand 2">
+      <customer name="Average Joe" />
+      <location name="3. factory" />
+      <quantity>100</quantity>
+      <minshipment>1</minshipment>
+      <item name="3. level 0" />
+      <due>2027-01-05T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="3. Demand 3">
+      <customer name="Average Joe" />
+      <location name="3. factory" />
+      <quantity>30</quantity>
+      <minshipment>1</minshipment>
+      <item name="3. level 0" />
+      <due>2027-04-01T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="3. Demand 4">
+      <customer name="Average Joe" />
+      <location name="3. factory" />
+      <quantity>30</quantity>
+      <minshipment>1</minshipment>
+      <item name="3. level 0" />
+      <due>2027-04-07T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="3. Demand 5">
+      <customer name="Average Joe" />
+      <location name="3. factory" />
+      <quantity>30</quantity>
+      <minshipment>1</minshipment>
+      <item name="3. level 0" />
+      <due>2027-04-15T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+  </demands>
+  <operations>
+    <operation name="3. Make level 0" xsi:type="operation_time_per">
+      <item name="3. level 0" />
+      <location name="3. factory" />
+      <batchwindow>P10D</batchwindow>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="3. level 0" />
+          <quantity>1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="3. level 1a" />
+          <quantity>-1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="3. level 1b" />
+          <quantity>-1</quantity>
+        </flow>
+      </flows>
+      <size_minimum>30</size_minimum>
+      <duration>P1D</duration>
+      <duration_per>PT1H</duration_per>
+    </operation>
+    <operation name="3. Make level 1a" xsi:type="operation_time_per">
+      <item name="3. level 1a" />
+      <location name="3. factory" />
+      <batchwindow>P10D</batchwindow>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="3. level 1a" />
+          <quantity>1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="3. level 2a" />
+          <quantity>-1</quantity>
+        </flow>
+      </flows>
+      <duration>P1D</duration>
+      <duration_per>PT1H</duration_per>
+    </operation>
+    <operation name="3. Make level 1b" xsi:type="operation_time_per">
+      <item name="3. level 1b" />
+      <location name="3. factory" />
+      <batchwindow>P10D</batchwindow>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="3. level 1b" />
+          <quantity>1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="3. level 2b" />
+          <quantity>-1</quantity>
+        </flow>
+      </flows>
+      <duration>P5D</duration>
+      <duration_per>PT1H</duration_per>
+    </operation>
+    <operation name="3. Make level 2b" xsi:type="operation_time_per">
+      <item name="3. level 2b" />
+      <location name="3. factory" />
+      <batchwindow>P10D</batchwindow>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="3. level 2b" />
+          <quantity>1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="3. level 3b" />
+          <quantity>-1</quantity>
+        </flow>
+      </flows>
+      <duration>P1D</duration>
+      <duration_per>PT1H</duration_per>
+    </operation>
+    <operation name="3. Make level 3b" xsi:type="operation_time_per">
+      <item name="3. level 3b" />
+      <location name="3. factory" />
+      <batchwindow>P10D</batchwindow>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="3. level 3b" />
+          <quantity>1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="3. level 4b" />
+          <quantity>-1</quantity>
+        </flow>
+      </flows>
+      <duration>P1D</duration>
+      <duration_per>PT1H</duration_per>
+    </operation>
+    <operation name="3. Make level 4b" xsi:type="operation_time_per">
+      <item name="3. level 4b" />
+      <location name="3. factory" />
+      <batchwindow>P200D</batchwindow>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="3. level 4b" />
+          <quantity>1</quantity>
+        </flow>
+      </flows>
+      <duration>P4D</duration>
+      <duration_per>PT1H</duration_per>
+    </operation>
+  </operations>
+  <items>
+    <item name="3. level 2a">
+      <itemsuppliers>
+        <itemsupplier>
+          <batchwindow>P10D</batchwindow>
+          <supplier name="MySupplier" />
+          <location name="3. factory" />
+          <leadtime>P7D</leadtime>
+          <priority>1</priority>
+        </itemsupplier>
+      </itemsuppliers>
+    </item>
+  </items>
+
+  <!--
+  4. Same as 3, and adding a capacity constraint and a second item.
+  Extra lateness in the new solver is because the old solver catches up with the overdue
+  backlog with smaller and shorter manufacturing orders.
+   -->
+  <locations>
+    <location name="4. factory">
+      <available name="4. Working Days">
+        <default>1</default>
+      </available>
+    </location>
+  </locations>
+  <resources>
+    <resource name="4. Resource">
+      <maximum>1</maximum>
+      <location name="4. factory" />
+    </resource>
+  </resources>
+  <demands>
+    <demand name="4. Demand-X 1">
+      <customer name="Average Joe" />
+      <location name="4. factory" />
+      <quantity>100</quantity>
+      <minshipment>100</minshipment>
+      <item name="4. X level 0" />
+      <due>2027-01-01T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="4. Demand-X 2">
+      <customer name="Average Joe" />
+      <location name="4. factory" />
+      <quantity>100</quantity>
+      <minshipment>100</minshipment>
+      <item name="4. X level 0" />
+      <due>2027-01-05T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="4. Demand-X 3">
+      <customer name="Average Joe" />
+      <location name="4. factory" />
+      <quantity>30</quantity>
+      <minshipment>30</minshipment>
+      <item name="4. X level 0" />
+      <due>2027-04-01T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="4. Demand-X 4">
+      <customer name="Average Joe" />
+      <location name="4. factory" />
+      <quantity>30</quantity>
+      <minshipment>30</minshipment>
+      <item name="4. X level 0" />
+      <due>2027-04-07T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="4. Demand-X 5">
+      <customer name="Average Joe" />
+      <location name="4. factory" />
+      <quantity>30</quantity>
+      <minshipment>30</minshipment>
+      <item name="4. X level 0" />
+      <due>2027-04-15T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="4. Demand-Y 1">
+      <customer name="Average Joe" />
+      <location name="4. factory" />
+      <quantity>100</quantity>
+      <minshipment>100</minshipment>
+      <item name="4. Y level 0" />
+      <due>2027-01-01T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="4. Demand-Y 2">
+      <customer name="Average Joe" />
+      <location name="4. factory" />
+      <quantity>100</quantity>
+      <minshipment>100</minshipment>
+      <item name="4. Y level 0" />
+      <due>2027-01-05T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="4. Demand-Y 3">
+      <customer name="Average Joe" />
+      <location name="4. factory" />
+      <quantity>30</quantity>
+      <minshipment>30</minshipment>
+      <item name="4. Y level 0" />
+      <due>2027-04-01T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="4. Demand-Y 4">
+      <customer name="Average Joe" />
+      <location name="4. factory" />
+      <quantity>30</quantity>
+      <minshipment>30</minshipment>
+      <item name="4. Y level 0" />
+      <due>2027-04-07T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="4. Demand-Y 5">
+      <customer name="Average Joe" />
+      <location name="4. factory" />
+      <quantity>30</quantity>
+      <minshipment>30</minshipment>
+      <item name="4. Y level 0" />
+      <due>2027-04-15T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+  </demands>
+  <operations>
+    <operation name="4. Make X level 0" xsi:type="operation_time_per">
+      <item name="4. X level 0" />
+      <location name="4. factory" />
+      <batchwindow>P10D</batchwindow>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="4. X level 0" />
+          <quantity>1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="4. X level 1a" />
+          <quantity>-1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="4. X level 1b" />
+          <quantity>-1</quantity>
+        </flow>
+      </flows>
+      <duration>P1D</duration>
+      <duration_per>PT1H</duration_per>
+    </operation>
+    <operation name="4. Make X level 1a" xsi:type="operation_time_per">
+      <item name="4. X level 1a" />
+      <location name="4. factory" />
+      <batchwindow>P10D</batchwindow>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="4. X level 1a" />
+          <quantity>1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="4. X level 2a" />
+          <quantity>-1</quantity>
+        </flow>
+      </flows>
+      <loads>
+        <load>
+          <resource name="4. Resource" />
+        </load>
+      </loads>
+      <duration>P1D</duration>
+      <duration_per>PT1H</duration_per>
+    </operation>
+    <operation name="4. Make X level 1b" xsi:type="operation_time_per">
+      <item name="4. X level 1b" />
+      <location name="4. factory" />
+      <batchwindow>P10D</batchwindow>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="4. X level 1b" />
+          <quantity>1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="4. X level 2b" />
+          <quantity>-1</quantity>
+        </flow>
+      </flows>
+      <duration>P5D</duration>
+      <duration_per>PT1H</duration_per>
+    </operation>
+    <operation name="4. Make X level 2b" xsi:type="operation_time_per">
+      <item name="4. X level 2b" />
+      <location name="4. factory" />
+      <batchwindow>P10D</batchwindow>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="4. X  level 2b" />
+          <quantity>1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="4. X level 3b" />
+          <quantity>-1</quantity>
+        </flow>
+      </flows>
+      <duration>P1D</duration>
+      <duration_per>PT1H</duration_per>
+    </operation>
+    <operation name="4. Make X level 3b" xsi:type="operation_time_per">
+      <item name="4. X level 3b" />
+      <location name="4. factory" />
+      <batchwindow>P10D</batchwindow>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="4. X level 3b" />
+          <quantity>1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="4. X level 4b" />
+          <quantity>-1</quantity>
+        </flow>
+      </flows>
+      <duration>P1D</duration>
+      <duration_per>PT1H</duration_per>
+    </operation>
+    <operation name="4. Make X level 4b" xsi:type="operation_time_per">
+      <item name="4. X level 4b" />
+      <location name="4. factory" />
+      <batchwindow>P200D</batchwindow>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="4. X level 4b" />
+          <quantity>1</quantity>
+        </flow>
+      </flows>
+      <duration>P4D</duration>
+      <duration_per>PT1H</duration_per>
+    </operation>
+    <operation name="4. Make Y level 0" xsi:type="operation_time_per">
+      <item name="4. Y level 0" />
+      <location name="4. factory" />
+      <batchwindow>P10D</batchwindow>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="4. Y level 0" />
+          <quantity>1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="4. Y level 1a" />
+          <quantity>-1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="4. Y level 1b" />
+          <quantity>-1</quantity>
+        </flow>
+      </flows>
+      <duration>P1D</duration>
+      <duration_per>PT1H</duration_per>
+    </operation>
+    <operation name="4. Make Y level 1a" xsi:type="operation_time_per">
+      <item name="4. Y level 1a" />
+      <location name="4. factory" />
+      <batchwindow>P10D</batchwindow>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="4. Y level 1a" />
+          <quantity>1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="4. Y level 2a" />
+          <quantity>-1</quantity>
+        </flow>
+      </flows>
+      <loads>
+        <load>
+          <resource name="4. Resource" />
+        </load>
+      </loads>
+      <duration>P1D</duration>
+      <duration_per>PT1H</duration_per>
+    </operation>
+    <operation name="4. Make Y level 1b" xsi:type="operation_time_per">
+      <item name="4. Y level 1b" />
+      <location name="4. factory" />
+      <batchwindow>P10D</batchwindow>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="4. Y level 1b" />
+          <quantity>1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="4. Y level 2b" />
+          <quantity>-1</quantity>
+        </flow>
+      </flows>
+      <duration>P5D</duration>
+      <duration_per>PT1H</duration_per>
+    </operation>
+    <operation name="4. Make Y level 2b" xsi:type="operation_time_per">
+      <item name="4. Y level 2b" />
+      <location name="4. factory" />
+      <batchwindow>P10D</batchwindow>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="4. Y level 2b" />
+          <quantity>1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="4. Y level 3b" />
+          <quantity>-1</quantity>
+        </flow>
+      </flows>
+      <duration>P1D</duration>
+      <duration_per>PT1H</duration_per>
+    </operation>
+    <operation name="4. Make Y level 3b" xsi:type="operation_time_per">
+      <item name="4. Y level 3b" />
+      <location name="4. factory" />
+      <batchwindow>P10D</batchwindow>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="4. Y level 3b" />
+          <quantity>1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="4. Y level 4b" />
+          <quantity>-1</quantity>
+        </flow>
+      </flows>
+      <duration>P1D</duration>
+      <duration_per>PT1H</duration_per>
+    </operation>
+    <operation name="4. Make Y level 4b" xsi:type="operation_time_per">
+      <item name="4. Y level 4b" />
+      <location name="4. factory" />
+      <batchwindow>P200D</batchwindow>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="4. Y level 4b" />
+          <quantity>1</quantity>
+        </flow>
+      </flows>
+      <duration>P4D</duration>
+      <duration_per>PT1H</duration_per>
+    </operation>
+  </operations>
+  <items>
+    <item name="4. X level 2a">
+      <itemsuppliers>
+        <itemsupplier>
+          <batchwindow>P10D</batchwindow>
+          <supplier name="MySupplier" />
+          <location name="4. factory" />
+          <leadtime>P7D</leadtime>
+          <priority>1</priority>
+        </itemsupplier>
+      </itemsuppliers>
+    </item>
+    <item name="4. Y level 2a">
+      <itemsuppliers>
+        <itemsupplier>
+          <batchwindow>P10D</batchwindow>
+          <supplier name="MySupplier" />
+          <location name="4. factory" />
+          <leadtime>P7D</leadtime>
+          <priority>1</priority>
+        </itemsupplier>
+      </itemsuppliers>
+    </item>
+  </items>
+
+  <!--
+  5. Capacity constraint causing lateness.
+  Results not ok.
+  -->
+  <locations>
+    <location name="5. factory">
+      <available name="5. Working Days">
+        <default>1</default>
+      </available>
+    </location>
+  </locations>
+  <resources>
+    <resource name="5. Resource">
+      <maximum>1</maximum>
+      <location name="5. factory" />
+    </resource>
+  </resources>
+  <demands>
+    <demand name="5. Demand-A 1">
+      <customer name="Average Joe" />
+      <location name="5. factory" />
+      <quantity>30</quantity>
+      <minshipment>30</minshipment>
+      <item name="5. A level 0" />
+      <due>2027-01-01T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="5. Demand-A 2">
+      <customer name="Average Joe" />
+      <location name="5. factory" />
+      <quantity>30</quantity>
+      <minshipment>30</minshipment>
+      <item name="5. A level 0" />
+      <due>2027-01-07T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="5. Demand-A 3">
+      <customer name="Average Joe" />
+      <location name="5. factory" />
+      <quantity>30</quantity>
+      <minshipment>30</minshipment>
+      <item name="5. A level 0" />
+      <due>2027-01-14T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="5. Demand-A 4">
+      <customer name="Average Joe" />
+      <location name="5. factory" />
+      <quantity>30</quantity>
+      <minshipment>30</minshipment>
+      <item name="5. A level 0" />
+      <due>2027-01-21T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="5. Demand-A 5">
+      <customer name="Average Joe" />
+      <location name="5. factory" />
+      <quantity>30</quantity>
+      <minshipment>30</minshipment>
+      <item name="5. A level 0" />
+      <due>2027-01-28T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="5. Demand-B 1">
+      <customer name="Average Joe" />
+      <location name="5. factory" />
+      <quantity>30</quantity>
+      <minshipment>30</minshipment>
+      <item name="5. B level 0" />
+      <due>2027-01-01T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="5. Demand-B 2">
+      <customer name="Average Joe" />
+      <location name="5. factory" />
+      <quantity>30</quantity>
+      <minshipment>30</minshipment>
+      <item name="5. B level 0" />
+      <due>2027-01-07T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="5. Demand-B 3">
+      <customer name="Average Joe" />
+      <location name="5. factory" />
+      <quantity>30</quantity>
+      <minshipment>30</minshipment>
+      <item name="5. B level 0" />
+      <due>2027-01-14T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="5. Demand-B 4">
+      <customer name="Average Joe" />
+      <location name="5. factory" />
+      <quantity>30</quantity>
+      <minshipment>30</minshipment>
+      <item name="5. B level 0" />
+      <due>2027-01-21T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="5. Demand-B 5">
+      <customer name="Average Joe" />
+      <location name="5. factory" />
+      <quantity>30</quantity>
+      <minshipment>30</minshipment>
+      <item name="5. B level 0" />
+      <due>2027-01-28T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="5. Demand-C 1">
+      <customer name="Average Joe" />
+      <location name="5. factory" />
+      <quantity>30</quantity>
+      <minshipment>30</minshipment>
+      <item name="5. C level 0" />
+      <due>2027-01-01T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="5. Demand-C 2">
+      <customer name="Average Joe" />
+      <location name="5. factory" />
+      <quantity>30</quantity>
+      <minshipment>30</minshipment>
+      <item name="5. C level 0" />
+      <due>2027-01-07T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="5. Demand-C 3">
+      <customer name="Average Joe" />
+      <location name="5. factory" />
+      <quantity>30</quantity>
+      <minshipment>30</minshipment>
+      <item name="5. C level 0" />
+      <due>2027-01-14T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="5. Demand-C 4">
+      <customer name="Average Joe" />
+      <location name="5. factory" />
+      <quantity>30</quantity>
+      <minshipment>30</minshipment>
+      <item name="5. C level 0" />
+      <due>2027-01-21T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="5. Demand-C 5">
+      <customer name="Average Joe" />
+      <location name="5. factory" />
+      <quantity>30</quantity>
+      <minshipment>30</minshipment>
+      <item name="5. C level 0" />
+      <due>2027-01-28T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="5. Demand-D 1">
+      <customer name="Average Joe" />
+      <location name="5. factory" />
+      <quantity>30</quantity>
+      <minshipment>30</minshipment>
+      <item name="5. D level 0" />
+      <due>2027-01-01T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="5. Demand-D 2">
+      <customer name="Average Joe" />
+      <location name="5. factory" />
+      <quantity>30</quantity>
+      <minshipment>30</minshipment>
+      <item name="5. D level 0" />
+      <due>2027-01-07T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="5. Demand-D 3">
+      <customer name="Average Joe" />
+      <location name="5. factory" />
+      <quantity>30</quantity>
+      <minshipment>30</minshipment>
+      <item name="5. D level 0" />
+      <due>2027-01-14T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="5. Demand-D 4">
+      <customer name="Average Joe" />
+      <location name="5. factory" />
+      <quantity>30</quantity>
+      <minshipment>30</minshipment>
+      <item name="5. D level 0" />
+      <due>2027-01-21T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="5. Demand-D 5">
+      <customer name="Average Joe" />
+      <location name="5. factory" />
+      <quantity>30</quantity>
+      <minshipment>30</minshipment>
+      <item name="5. D level 0" />
+      <due>2027-01-28T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="5. Demand-E 1">
+      <customer name="Average Joe" />
+      <location name="5. factory" />
+      <quantity>30</quantity>
+      <minshipment>30</minshipment>
+      <item name="5. E level 0" />
+      <due>2027-01-01T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="5. Demand-E 2">
+      <customer name="Average Joe" />
+      <location name="5. factory" />
+      <quantity>30</quantity>
+      <minshipment>30</minshipment>
+      <item name="5. E level 0" />
+      <due>2027-01-07T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="5. Demand-E 3">
+      <customer name="Average Joe" />
+      <location name="5. factory" />
+      <quantity>30</quantity>
+      <minshipment>30</minshipment>
+      <item name="5. E level 0" />
+      <due>2027-01-14T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="5. Demand-E 4">
+      <customer name="Average Joe" />
+      <location name="5. factory" />
+      <quantity>30</quantity>
+      <minshipment>30</minshipment>
+      <item name="5. E level 0" />
+      <due>2027-01-21T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="5. Demand-E 5">
+      <customer name="Average Joe" />
+      <location name="5. factory" />
+      <quantity>30</quantity>
+      <minshipment>30</minshipment>
+      <item name="5. E level 0" />
+      <due>2027-01-28T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+  </demands>
+  <operations>
+    <operation name="5. Make A level 0" xsi:type="operation_fixed_time">
+      <item name="5. A level 0" />
+      <location name="5. factory" />
+      <batchwindow>P3D</batchwindow>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="5. A level 0" />
+          <quantity>1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="5. A level 1" />
+          <quantity>-1</quantity>
+        </flow>
+      </flows>
+      <duration>P3D</duration>
+    </operation>
+    <operation name="5. Make A level 1" xsi:type="operation_time_per">
+      <item name="5. A level 1" />
+      <location name="5. factory" />
+      <batchwindow>P3D</batchwindow>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="5. A level 1" />
+          <quantity>1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="5. A level 2" />
+          <quantity>-1</quantity>
+        </flow>
+      </flows>
+      <loads>
+        <load>
+          <resource name="5. Resource" />
+        </load>
+      </loads>
+      <duration>P1D</duration>
+      <duration_per>PT1H</duration_per>
+    </operation>
+    <operation name="5. Make B level 0" xsi:type="operation_fixed_time">
+      <item name="5. B level 0" />
+      <location name="5. factory" />
+      <batchwindow>P3D</batchwindow>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="5. B level 0" />
+          <quantity>1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="5. B level 1" />
+          <quantity>-1</quantity>
+        </flow>
+      </flows>
+      <duration>P10D</duration>
+    </operation>
+    <operation name="5. Make B level 1" xsi:type="operation_time_per">
+      <item name="5. B level 1" />
+      <location name="5. factory" />
+      <batchwindow>P3D</batchwindow>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="5. B level 1" />
+          <quantity>1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="5. B level 2" />
+          <quantity>-1</quantity>
+        </flow>
+      </flows>
+      <loads>
+        <load>
+          <resource name="5. Resource" />
+        </load>
+      </loads>
+      <duration>P1D</duration>
+      <duration_per>PT1H</duration_per>
+    </operation>
+    <operation name="5. Make C level 0" xsi:type="operation_fixed_time">
+      <item name="5. C level 0" />
+      <location name="5. factory" />
+      <batchwindow>P3D</batchwindow>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="5. C level 0" />
+          <quantity>1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="5. C level 1" />
+          <quantity>-1</quantity>
+        </flow>
+      </flows>
+      <duration>P1D</duration>
+    </operation>
+    <operation name="5. Make C level 1" xsi:type="operation_time_per">
+      <item name="5. C level 1" />
+      <location name="5. factory" />
+      <batchwindow>P1D</batchwindow>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="5. C level 1" />
+          <quantity>1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="5. C level 2" />
+          <quantity>-1</quantity>
+        </flow>
+      </flows>
+      <loads>
+        <load>
+          <resource name="5. Resource" />
+        </load>
+      </loads>
+      <duration>P1D</duration>
+      <duration_per>PT1H</duration_per>
+    </operation>
+    <operation name="5. Make D level 0" xsi:type="operation_fixed_time">
+      <item name="5. D level 0" />
+      <location name="5. factory" />
+      <batchwindow>P3D</batchwindow>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="5. D level 0" />
+          <quantity>1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="5. D level 1" />
+          <quantity>-1</quantity>
+        </flow>
+      </flows>
+      <duration>P3D</duration>
+    </operation>
+    <operation name="5. Make D level 1" xsi:type="operation_time_per">
+      <item name="5. D level 1" />
+      <location name="5. factory" />
+      <batchwindow>P3D</batchwindow>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="5. D level 1" />
+          <quantity>1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="5. D level 2" />
+          <quantity>-1</quantity>
+        </flow>
+      </flows>
+      <loads>
+        <load>
+          <resource name="5. Resource" />
+        </load>
+      </loads>
+      <duration>P1D</duration>
+      <duration_per>PT1H</duration_per>
+    </operation>
+    <operation name="5. Make E level 0" xsi:type="operation_fixed_time">
+      <item name="5. E level 0" />
+      <location name="5. factory" />
+      <batchwindow>P3D</batchwindow>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="5. E level 0" />
+          <quantity>1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="5. E level 1" />
+          <quantity>-1</quantity>
+        </flow>
+      </flows>
+      <duration>P3D</duration>
+    </operation>
+    <operation name="5. Make E level 1" xsi:type="operation_time_per">
+      <item name="5. E level 1" />
+      <location name="5. factory" />
+      <batchwindow>P3D</batchwindow>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="5. E level 1" />
+          <quantity>1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="5. E level 2" />
+          <quantity>-1</quantity>
+        </flow>
+      </flows>
+      <loads>
+        <load>
+          <resource name="5. Resource" />
+        </load>
+      </loads>
+      <duration>P1D</duration>
+      <duration_per>PT1H</duration_per>
+    </operation>
+  </operations>
+  <items>
+    <item name="5. A level 2">
+      <itemsuppliers>
+        <itemsupplier>
+          <batchwindow>P7D</batchwindow>
+          <supplier name="MySupplier" />
+          <location name="5. factory" />
+          <leadtime>P14D</leadtime>
+          <priority>1</priority>
+        </itemsupplier>
+      </itemsuppliers>
+    </item>
+    <item name="5. B level 2">
+      <itemsuppliers>
+        <itemsupplier>
+          <batchwindow>P7D</batchwindow>
+          <supplier name="MySupplier" />
+          <location name="5. factory" />
+          <leadtime>P0D</leadtime>
+          <priority>1</priority>
+        </itemsupplier>
+      </itemsuppliers>
+    </item>
+    <item name="5. C level 2">
+      <itemsuppliers>
+        <itemsupplier>
+          <batchwindow>P7D</batchwindow>
+          <supplier name="MySupplier" />
+          <location name="5. factory" />
+          <leadtime>P1D</leadtime>
+          <priority>1</priority>
+        </itemsupplier>
+      </itemsuppliers>
+    </item>
+    <item name="5. D level 2">
+      <itemsuppliers>
+        <itemsupplier>
+          <batchwindow>P7D</batchwindow>
+          <supplier name="MySupplier" />
+          <location name="5. factory" />
+          <leadtime>P12D</leadtime>
+          <priority>1</priority>
+        </itemsupplier>
+      </itemsuppliers>
+    </item>
+    <item name="5. E level 2">
+      <itemsuppliers>
+        <itemsupplier>
+          <batchwindow>P7D</batchwindow>
+          <supplier name="MySupplier" />
+          <location name="5. factory" />
+          <leadtime>P18D</leadtime>
+          <priority>1</priority>
+        </itemsupplier>
+      </itemsuppliers>
+    </item>
+  </items>
+
+  <!--
+  6. Reusing the same resource at multiple steps in a supply path.
+  Results not ok.
+  -->
+  <locations>
+    <location name="6. factory">
+      <available name="6. Working Days">
+        <default>1</default>
+      </available>
+    </location>
+  </locations>
+  <resources>
+    <resource name="6. Resource">
+      <maximum>1</maximum>
+      <location name="6. factory" />
+    </resource>
+  </resources>
+  <demands>
+    <demand name="6. Demand 1">
+      <customer name="Average Joe" />
+      <location name="6. factory" />
+      <quantity>30</quantity>
+      <minshipment>30</minshipment>
+      <item name="6. level 0" />
+      <due>2027-01-01T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="6. Demand 2">
+      <customer name="Average Joe" />
+      <location name="6. factory" />
+      <quantity>30</quantity>
+      <minshipment>30</minshipment>
+      <item name="6. level 0" />
+      <due>2027-01-07T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="6. Demand 3">
+      <customer name="Average Joe" />
+      <location name="6. factory" />
+      <quantity>30</quantity>
+      <minshipment>30</minshipment>
+      <item name="6. level 0" />
+      <due>2027-01-14T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="6. Demand 4">
+      <customer name="Average Joe" />
+      <location name="6. factory" />
+      <quantity>30</quantity>
+      <minshipment>30</minshipment>
+      <item name="6. level 0" />
+      <due>2027-01-21T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+    <demand name="6. Demand 5">
+      <customer name="Average Joe" />
+      <location name="6. factory" />
+      <quantity>30</quantity>
+      <minshipment>30</minshipment>
+      <item name="6. level 0" />
+      <due>2027-01-28T00:00:00</due>
+      <priority>1</priority>
+    </demand>
+  </demands>
+  <operations>
+    <operation name="6. Make level 0" xsi:type="operation_time_per">
+      <item name="6. level 0" />
+      <location name="6. factory" />
+      <batchwindow>P3D</batchwindow>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="6. level 0" />
+          <quantity>1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="6. level 1" />
+          <quantity>-1</quantity>
+        </flow>
+      </flows>
+      <loads>
+        <load>
+          <resource name="6. Resource" />
+        </load>
+      </loads>
+      <duration>P1D</duration>
+      <duration_per>PT1H</duration_per>
+    </operation>
+    <operation name="6. Make level 1" xsi:type="operation_time_per">
+      <item name="6. level 1" />
+      <location name="6. factory" />
+      <batchwindow>P3D</batchwindow>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="6. level 1" />
+          <quantity>1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="6. level 2" />
+          <quantity>-1</quantity>
+        </flow>
+      </flows>
+      <loads>
+        <load>
+          <resource name="6. Resource" />
+        </load>
+      </loads>
+      <duration>P1D</duration>
+      <duration_per>PT1H</duration_per>
+    </operation>
+    <operation name="6. Make level 2" xsi:type="operation_time_per">
+      <item name="6. level 2" />
+      <location name="6. factory" />
+      <batchwindow>P3D</batchwindow>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="6. level 2" />
+          <quantity>1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="6. level 3" />
+          <quantity>-1</quantity>
+        </flow>
+      </flows>
+      <loads>
+        <load>
+          <resource name="6. Resource" />
+        </load>
+      </loads>
+      <duration>P1D</duration>
+      <duration_per>PT1H</duration_per>
+    </operation>
+    <operation name="6. Make level 3" xsi:type="operation_time_per">
+      <item name="6. level 3" />
+      <location name="6. factory" />
+      <batchwindow>P3D</batchwindow>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="6. level 3" />
+          <quantity>1</quantity>
+        </flow>
+        <flow xsi:type="flow_start">
+          <item name="6. level 4" />
+          <quantity>-1</quantity>
+        </flow>
+      </flows>
+      <loads>
+        <load>
+          <resource name="6. Resource" />
+        </load>
+      </loads>
+      <duration>P1D</duration>
+      <duration_per>PT1H</duration_per>
+    </operation>
+    <operation name="6. Make level 4" xsi:type="operation_time_per">
+      <item name="6. level 4" />
+      <location name="6. factory" />
+      <batchwindow>P3D</batchwindow>
+      <flows>
+        <flow xsi:type="flow_end">
+          <item name="6. level 4" />
+          <quantity>1</quantity>
+        </flow>
+      </flows>
+      <loads>
+        <load>
+          <resource name="6. Resource" />
+        </load>
+      </loads>
+      <duration>P1D</duration>
+      <duration_per>PT1H</duration_per>
+    </operation>
+  </operations>
+  <?python
+print("CREATING CONSTRAINED PLAN")
+frepple.solver_mrp(plantype=1, constraints=15, loglevel=2, algorithm="heuristic_2").solve()
+frepple.saveplan("output.1.xml")
+for dmd in frepple.demands():
+    dmd.new_delay = dmd.delay
+
+print("CREATING UNCONSTRAINED PLAN")
+frepple.solver_mrp(plantype=2, constraints=15, loglevel=2, algorithm="heuristic_2").solve()
+frepple.saveplan("output.2.xml")
+
+print("CREATING CONSTRAINED PLAN WITH DEMAND PER DEMAND PLAN")
+frepple.solver_mrp(plantype=1, constraints=15, loglevel=2).solve()
+frepple.saveplan("output.3.xml")
+
+print("COMPARING RESULTS FROM OLD AND NEW SOLVER")
+print(f"{'Name':<30}{'Due':<20}{'Quantity':>10}{'Old Delay':>12}{'New Delay':>12}")
+oldDelay = newDelay = 0
+for dmd in frepple.demands():
+    print(
+      f"{dmd.name:<30}{str(dmd.due):<20}{dmd.quantity:>10}"
+      f"{round(dmd.delay/86400):>12}{round(dmd.new_delay/86400):>12}"
+    )
+    oldDelay += dmd.delay
+    newDelay += dmd.new_delay
+print(
+  f"{'Total':<30}{'':<20}{'':>10}"
+  f"{round(oldDelay/86400):>12}{round(newDelay/86400):>12}")?>
+
+</plan>

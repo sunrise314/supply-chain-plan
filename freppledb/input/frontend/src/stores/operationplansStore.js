@@ -1,0 +1,960 @@
+/*
+ * Copyright (C) 2025 by frePPLe bv
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the
+ * "Software"), to deal in the Software without restriction, including
+ * without limitation the rights to use, copy, modify, merge, publish,
+ * distribute, sublicense, and/or sell copies of the Software, and to
+ * permit persons to whom the Software is furnished to do so, subject to
+ * the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+ * LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+ * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+ * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE
+ */
+
+import { toRaw } from 'vue';
+import { defineStore } from 'pinia';
+import { operationplanService } from '@input/services/operationplanService.js';
+import { Operationplan } from '@input/models/operationplan.js';
+import { useOperationplanSave } from '@input/composables/useOperationplanSave.js';
+import { useOperationplanEdit } from '@input/composables/useOperationplanEdit.js';
+import { appConfig } from '@input/config.js';
+import { getPreference, setPreferences } from '@input/services/preferences.js';
+
+/**
+ * @typedef {Object} OperationplansState
+ * @property {string} mode - Display mode: 'table', 'kanban', 'gantt', or 'calendar*'
+ * @property {string} calendarmode - Calendar mode: 'day', 'week', or 'month'
+ * @property {string} grouping - Grouping configuration
+ * @property {string} groupingdir - Grouping direction: 'asc' or 'desc'
+ * @property {boolean} showTop - Show top level operations
+ * @property {boolean} showChildren - Show child level operations
+ * @property {Array} operationplan - single operationplans
+ * @property {Array} selectedOperationplans - Multiple selected operationplans   // list of ids
+ * @property {Object} operationplanChanges - Multiple selected operationplans   // {reference: {fields: values}}
+ * @property {boolean} loading - Loading state
+ * @property {Object} error - Error state
+ * @property {number} dataRowHeight - Row height for table
+ * @property {Date} horizonstart - Start date of planning horizon
+ * @property {Date} horizonend - End date of planning horizon
+ * @property {Date} viewstart - Start date of current view
+ * @property {Date} viewend - End date of current view
+ * @property {Date} currentdate - Current date
+ * @property {string} currentFilter - Current search/filter
+ * @property {string} sidx
+ * @property {string} sord
+ * @property {string} width
+ * @property {string} detailWidth
+ */
+
+const moment = window.moment;
+
+export const useOperationplansStore = defineStore('operationplans', {
+  state: () => ({
+    // Data
+    operationplan: new Operationplan(),
+    operationplans: {},
+    selectedOperationplans: [],
+    selectedStatusCounts: {},
+    operationplanChanges: {},
+
+    editForm: { quantity: null, startdate: '', enddate: '', remark: '' },
+
+    mode: getPreference('mode') ?? window.mode ?? 'table',
+    calendarmode: 'month',
+    grouping: null,
+    groupingdir: 'asc',
+    showTop: true,
+    showChildren: true,
+    page: 1,
+    rows: [], // table columns to be (de)selected
+    frozen: 0,
+    currentFilter: '',
+    widgets: {},
+    sidx: 'batch',
+    sord: 'asc',
+    segment: '',
+    columns: [], // ['proposed', 'approved', 'confirmed', 'completed', 'closed']
+
+    // UI state
+    loading: false,
+    exporting: false,
+    exportError: null,
+    exportSuccess: null,
+    error: { title: '', showError: false, message: '', details: '', type: 'error' },
+    dataRowHeight: getPreference('height', null),
+    width: 300,
+    detailwidth: 300,
+    height: 300,
+
+    // Calendar
+    horizonstart: new Date(),
+    horizonend: new Date(),
+    viewstart: new Date(),
+    viewend: new Date(),
+    currentdate: new Date(),
+
+    // Kanban
+    kanbanoperationplans: {},
+    kanbancolumns: getPreference('columns') ?? [
+      'proposed',
+      'approved',
+      'confirmed',
+      'completed',
+      'closed',
+    ],
+    groupBy: window.groupBy || 'status',
+    groupOperator: window.groupOperator || 'eq',
+    ganttoperationplans: [],
+    calendarevents: [],
+    multipleGanttSelectData: null,
+    multiSelectLoadplans: {},
+  }),
+
+  getters: {
+    isTableMode: (state) => state.mode === 'table',
+    isKanbanMode: (state) => state.mode === 'kanban',
+    isGanttMode: (state) => state.mode === 'gantt',
+    isCalendarMode: (state) => state.mode.startsWith('calendar'),
+    hasSelected: (state) => state.selectedOperationplans?.length > 0,
+    hasChanges(state) {
+      return Object.keys(state.operationplanChanges).length > 0;
+    },
+  },
+
+  actions: {
+    setMode(newMode) {
+      this.mode = newMode;
+      window.mode = newMode;
+      setPreferences({ mode: newMode });
+      this.undo();
+    },
+
+    setCalendarMode(newCalendarMode) {
+      this.calendarmode = newCalendarMode;
+      setPreferences({ calendarmode: newCalendarMode });
+    },
+
+    setMultipleGanttSelectData(data) {
+      this.multipleGanttSelectData = data;
+    },
+
+    setGrouping(newGrouping) {
+      this.grouping = newGrouping;
+      setPreferences({ grouping: newGrouping });
+    },
+
+    isChanged(reference, field = null) {
+      if (!reference) return false;
+      if (!field) return Object.keys(this.operationplanChanges).includes(reference);
+      else
+        return (
+          Object.prototype.hasOwnProperty.call(this.operationplanChanges, reference) &&
+          Object.prototype.hasOwnProperty.call(this.operationplanChanges[reference], field)
+        );
+    },
+
+    async loadOperationplans(
+      references = [],
+      selectedFlag,
+      selectedRows,
+      isDataSaved = false,
+      forceRefresh = false
+    ) {
+      this.selectedOperationplans.length = 0;
+      this.selectedOperationplans.push(...toRaw(selectedRows));
+      if (references.length === 0) {
+        this.operationplan = new Operationplan();
+      } else if (selectedFlag === false) {
+        if (this.selectedOperationplans.length === 1) {
+          await this.loadOperationplans(selectedRows, true, selectedRows);
+        }
+        // } else if ( this.operationplan.reference !== undefined && (references[0] === this.operationplan.reference.toString())) {
+        // do nothing
+      } else {
+        const operationplanReference = references[0];
+        this.loading = true;
+        this.error.showError = false;
+
+        try {
+          const response = await operationplanService.getOperationplanDetails({
+            reference: operationplanReference,
+          });
+
+          // Update the store with the fetched data
+          const rawData = toRaw(response.responseData.value);
+          const operationplan = Array.isArray(rawData) ? rawData?.[0] : rawData;
+          if (this.selectedOperationplans.length === 1) {
+            this.operationplan = operationplan
+              ? new Operationplan(operationplan)
+              : new Operationplan();
+          } else {
+            this.operationplan = new Operationplan();
+          }
+        } catch (error) {
+          console.error('[loadOperationplans] error:', error);
+          this.error = {
+            title: 'Failed to load operation plans',
+            showError: true,
+            message:
+              error.response?.data?.message || 'An error occurred while loading operation plans',
+            details: error.message,
+            type: 'error',
+          };
+        } finally {
+          this.loading = false;
+        }
+      }
+      if (
+        this.operationplanChanges[this.operationplan.reference] !== undefined &&
+        !window.isDataSaved
+      ) {
+        for (const field in this.operationplanChanges[this.operationplan.reference]) {
+          this.operationplan[field] =
+            this.operationplanChanges[this.operationplan.reference][field];
+        }
+      }
+    },
+
+    async loadKanbanData(thefilter) {
+      if (this.mode !== 'kanban') return;
+
+      // The card markup is fetched by the report template while the page parses,
+      // and KanbanCard reads it from window.kanban_card_template inside a computed
+      // that has no reactive dependency - so a card rendered before the fetch
+      // resolves caches the empty fallback and stays blank for the life of the
+      // page, leaving columns that show their record count with no cards in them.
+      //
+      // Every kanban load funnels through here, including the one undo() triggers
+      // from jqGrid's loadComplete while the page is still loading, so the wait
+      // has to be here rather than at any one caller.
+      try {
+        await window.kanban_card_template_promise;
+      } catch (err) {
+        console.warn('Kanban card template failed to load', err);
+      }
+
+      if (!thefilter) {
+        thefilter = this.currentFilter || window.initialfilter;
+      }
+
+      const params = {
+        format: 'kanban',
+        sidx: this.sidx,
+        sord: this.sord,
+      };
+
+      const promises = this.kanbancolumns.map(async (key) => {
+        let colfilter = thefilter ? JSON.parse(JSON.stringify(thefilter)) : undefined;
+        const extrafilter = {
+          field: this.groupBy,
+          op: this.groupOperator,
+          data: key,
+        };
+        if (colfilter === undefined || colfilter === null) {
+          colfilter = {
+            groupOp: 'AND',
+            rules: [extrafilter],
+            groups: [],
+          };
+        } else {
+          if (colfilter['groupOp'] === 'AND') colfilter['rules'].push(extrafilter);
+          else
+            colfilter = {
+              groupOp: 'AND',
+              rules: [extrafilter],
+              groups: [colfilter],
+            };
+        }
+        try {
+          const { responseData } = await operationplanService.getKanbanData({
+            ...params,
+            filters: JSON.stringify(colfilter),
+          });
+          this.kanbanoperationplans[key] = responseData.value;
+        } catch (err) {
+          if (err.response && err.response.status === 401) location.reload();
+          throw err;
+        }
+        if (
+          this.operationplanChanges[this.operationplan.reference] !== undefined &&
+          !window.isDataSaved
+        ) {
+          for (const field in this.operationplanChanges[this.operationplan.reference]) {
+            this.kanbanoperationplans[key][this.operationplan.reference][field] =
+              this.operationplanChanges[this.operationplan.reference][field];
+          }
+          for (const field in this.operationplanChanges[this.operationplan.reference]) {
+            this.kanbanoperationplans[key][this.operationplan.reference][field] =
+              this.operationplanChanges[this.operationplan.reference][field];
+          }
+        }
+      });
+      await Promise.all(promises);
+    },
+
+    // Filter and search actions
+    setCurrentFilter(filter) {
+      this.currentFilter = filter;
+      this.page = 1; // Reset to first page when filter changes
+    },
+
+    resetFilter() {
+      this.currentFilter = '';
+      this.page = 1;
+      this.sidx = 'batch';
+      this.sord = 'asc';
+      // NOTE: sidx/sord are grid-owned. Sort persistence stays with
+      // grid.saveColumnConfiguration, which writes them on every save.
+    },
+
+    async setStatus(value) {
+      if (!this._editComposable) this._editComposable = useOperationplanEdit(this);
+      return this._editComposable.setStatus(value);
+    },
+
+    setKanbanStatus(oldStatus, oldIndex, newStatus, newIndex, reference) {
+      if (!this.kanbancolumns.includes(newStatus)) return;
+
+      const currentRef =
+        this.operationplan?.reference || this.operationplan?.operationplan__reference;
+      if (currentRef === reference) {
+        this.operationplan.status = newStatus;
+        if (Object.prototype.hasOwnProperty.call(this.operationplan, 'operationplan__status')) {
+          this.operationplan.operationplan__status = newStatus;
+        }
+      }
+    },
+
+    // Move all cards sharing a reference between Kanban columns when the status
+    // changes. A status applies to the whole operationplan, so every card of
+    // that operationplan has to move along.
+    // The optional insertIndex places the moved group at that position in the
+    // target column (used by drag-and-drop); omit it to insert at the top.
+    moveKanbanCard(reference, oldStatus, newStatus, insertIndex = null) {
+      if (!this.kanbancolumns.includes(newStatus)) return;
+      if (oldStatus === newStatus) return;
+
+      const oldColumn = this.kanbanoperationplans[oldStatus];
+      if (!oldColumn || !oldColumn.rows) return;
+
+      const matches = (row) =>
+        row.reference == reference ||
+        row.operationplan__reference == reference ||
+        row.id == reference;
+
+      // Collect all matching cards, preserving their source order.
+      const moved = [];
+      for (let i = oldColumn.rows.length - 1; i >= 0; i--) {
+        if (matches(oldColumn.rows[i])) moved.unshift(oldColumn.rows.splice(i, 1)[0]);
+      }
+      if (moved.length === 0) return;
+
+      // Update status fields
+      for (const cardData of moved) {
+        cardData.status = newStatus;
+        if (Object.prototype.hasOwnProperty.call(cardData, 'operationplan__status')) {
+          cardData.operationplan__status = newStatus;
+        }
+        cardData.dirty = true;
+      }
+
+      // Ensure new column exists
+      if (!this.kanbanoperationplans[newStatus]) {
+        this.kanbanoperationplans[newStatus] = { rows: [], records: 0 };
+      }
+      const newColumn = this.kanbanoperationplans[newStatus];
+
+      // Insert the group at the requested position, otherwise at the top.
+      let index = insertIndex;
+      if (index === null || index < 0 || index > newColumn.rows.length) {
+        index = index === null ? 0 : newColumn.rows.length;
+      }
+      newColumn.rows.splice(index, 0, ...moved);
+
+      // Update counters
+      oldColumn.records -= moved.length;
+      newColumn.records += moved.length;
+    },
+
+    setFrozenColumns(frozen) {
+      this.frozen = frozen;
+    },
+
+    // Calendar and view actions
+    setViewRange(start, end) {
+      this.viewstart = start;
+      this.viewend = end;
+    },
+
+    setHorizonRange(start, end) {
+      this.horizonstart = start;
+      this.horizonend = end;
+    },
+
+    setCurrentDate(date) {
+      this.currentdate = date;
+    },
+
+    // Initialize UI state from the server-rendered preference document. It is
+    // the source of truth; there is no localStorage cache and no store-owned
+    // copy of it.
+    async initialize() {
+      const mode = getPreference('mode');
+      if (mode) this.mode = mode;
+      const calendarmode = getPreference('calendarmode');
+      if (calendarmode) this.calendarmode = calendarmode;
+      const grouping = getPreference('grouping');
+      if (grouping) this.grouping = grouping;
+      const groupingdir = getPreference('groupingdir');
+      if (groupingdir) this.groupingdir = groupingdir;
+      const sidx = getPreference('sidx');
+      if (sidx) this.sidx = sidx;
+      const sord = getPreference('sord');
+      if (sord) this.sord = sord;
+
+      // Load initial data
+      await this.loadOperationplans();
+    },
+
+    setShowTop(value) {
+      this.showTop = value;
+      setPreferences({ showTop: value });
+    },
+
+    setShowChildren(value) {
+      this.showChildren = value;
+      setPreferences({ showChildren: value });
+    },
+
+    setDataRowHeight(height) {
+      this.dataRowHeight = height;
+      setPreferences({ height: height });
+    },
+
+    setViewDates(startDate, endDate) {
+      this.viewstart = new Date(startDate);
+      this.viewend = new Date(endDate);
+    },
+
+    clearSelection() {
+      this.selectedOperationplan = null;
+      this.selectedOperationplans = [];
+    },
+
+    setCalendarEvents(events) {
+      this.calendarevents = events;
+    },
+
+    async loadCalendarData(thefilter) {
+      if (!this.mode.startsWith('calendar')) return;
+      if (!thefilter) {
+        thefilter = this.currentFilter || window.initialfilter;
+      }
+
+      const params = {
+        format: 'calendar',
+        sidx: this.sidx,
+        sord: this.sord,
+      };
+
+      if (thefilter) {
+        params.filters = JSON.stringify(thefilter);
+      }
+
+      try {
+        const endpoint =
+          (location.pathname.startsWith(window.url_prefix)
+            ? location.pathname.substring(window.url_prefix.length)
+            : location.pathname) +
+          '?' +
+          new URLSearchParams(params).toString();
+        const response = await operationplanService.getCalendarData(
+          endpoint.startsWith('/') ? endpoint.substring(1) : endpoint
+        );
+        this.calendarevents = response.responseData.value || [];
+      } catch (err) {
+        if (err.response && err.response.status === 401) location.reload();
+        throw err;
+      }
+    },
+
+    setExporting(status) {
+      this.exporting = status;
+    },
+
+    undo(skipSavedEvent = false) {
+      // Preserve reference before clearing for refresh after save
+      const savedRef =
+        this.operationplan?.reference || this.operationplan?.operationplan__reference;
+      this.operationplan = new Operationplan();
+      this.editForm = { setQuantity: null, setStart: '', setEnd: '', setRemark: '' };
+      this.selectedOperationplans = [];
+      this.selectedStatusCounts = {};
+      this.operationplanChanges = {};
+      this.multipleGanttSelectData = null;
+      this.multiSelectOperationplans = {};
+      window.operationplanChanges = toRaw(this.operationplanChanges);
+      // Dispatch 'saved' event for post-save refresh only
+      const rootEl = document.getElementById('app');
+      if (!skipSavedEvent && rootEl && savedRef) {
+        rootEl.dispatchEvent(new CustomEvent('saved', { detail: { reference: savedRef } }));
+      } else if (!skipSavedEvent) {
+        console.warn(
+          '[undo] NOT dispatching saved event - rootEl:',
+          !!rootEl,
+          'savedRef:',
+          !!savedRef
+        );
+      }
+      if (this.mode === 'kanban') {
+        this.loadKanbanData();
+      }
+    },
+
+    async saveOperationplanChanges() {
+      if (!this._saveComposable) this._saveComposable = useOperationplanSave(this);
+      return this._saveComposable.savePendingChanges();
+    },
+
+    async saveBatchChanges() {
+      if (!this._saveComposable) this._saveComposable = useOperationplanSave(this);
+      return this._saveComposable.saveBatchChanges();
+    },
+
+    async erpExport() {
+      try {
+        const exportPayload = [];
+
+        const toExportOplan = (rec) => {
+          const op = rec.operationplan || rec;
+          return {
+            reference: rec.reference || op.reference || rec.operationplan__reference,
+            type:
+              rec.type ||
+              op.type ||
+              rec.operationplan__type ||
+              rec.ordertype ||
+              op.ordertype ||
+              this.multiSelectOperationplans[rec.reference || op.reference]?.type,
+            quantity: rec.quantity ?? op.quantity ?? rec.operationplan__quantity,
+            enddate: rec.end || op.end || rec.enddate || rec.operationplan__enddate,
+          };
+        };
+
+        // multiselect, via processAggregatedInfo
+        if (this.selectedOperationplans.length > 0) {
+          for (const op of this.selectedOperationplans) {
+            if (typeof op === 'string') {
+              const opplan = this.operationplans[op];
+              if (opplan) exportPayload.push(toExportOplan(opplan));
+            } else {
+              exportPayload.push(toExportOplan(op));
+            }
+          }
+        }
+
+        if (exportPayload.length === 0 && this.operationplan?.reference) {
+          exportPayload.push(toExportOplan(this.operationplan));
+        }
+
+        if (exportPayload.length === 0) {
+          this.exportError = 'No records to export.';
+          return;
+        }
+
+        const response = await operationplanService.exportToERP(exportPayload);
+
+        // Handle successful response
+        if (response.responseData?.value === 'OK') {
+          this.exportError = null;
+          this.exportSuccess = true;
+        } else if (response.responseData?.value[0]?.messages) {
+          this.exportError = response.responseData.value[0].messages.join('\n');
+        } else if (response.responseData?.value.messages) {
+          this.exportError = response.responseData.value.messages.join('\n');
+        } else {
+          this.exportError = 'Export failed: Unexpected response format from server';
+        }
+      } catch (err) {
+        if (err.response) {
+          // Server responded with error status
+          if (err.response.data && err.response.data.detail) {
+            this.exportError = err.response.data.detail;
+          } else if (err.response.data && err.response.data.message) {
+            this.exportError = err.response.data.message;
+          } else {
+            this.exportError = 'Server error: ' + (err.response.status || 'Unknown');
+          }
+        } else if (err.request) {
+          // Request made but no response received
+          this.exportError = 'No response from server';
+        } else {
+          // Something else happened in setting up the request
+          this.exportError = err.message || 'Export failed: Unknown error';
+        }
+      } finally {
+        this.setExporting(false);
+      }
+    },
+
+    // Error handling
+    setError(errorData) {
+      this.error = {
+        showError: true,
+        title: errorData.title || 'Error',
+        message: errorData.message || 'An error occurred',
+        details: errorData.details || '',
+        type: errorData.type || 'error',
+      };
+    },
+
+    clearError() {
+      this.error = {
+        showError: false,
+        message: '',
+        details: '',
+        type: 'error',
+        title: '',
+      };
+    },
+
+    // Process aggregated info for multiple selections
+    processAggregatedInfo(operationplans, colModel) {
+      this.selectedOperationplans = operationplans;
+      this.selectedStatusCounts = {};
+      operationplans.forEach((op) => {
+        const status = op.status || op.operationplan__status || 'proposed';
+        if (status) {
+          this.selectedStatusCounts[status] = (this.selectedStatusCounts[status] || 0) + 1;
+        }
+      });
+
+      if (!colModel) return;
+
+      const aggColModel = [];
+      const aggregatedopplan = { colmodel: {} };
+      let temp;
+
+      colModel.forEach((modelValue, key) => {
+        if (Object.prototype.hasOwnProperty.call(modelValue, 'summaryType')) {
+          aggColModel.push([key, modelValue.name, modelValue.summaryType, modelValue.formatter]);
+          aggregatedopplan[modelValue.name] = null;
+          aggregatedopplan.colmodel[modelValue.name] = {
+            type: modelValue.summaryType,
+            label: modelValue.label,
+            formatter: modelValue.formatter,
+          };
+        }
+      });
+
+      const dateKeys = new Set(['end', 'start']);
+      operationplans.forEach((opplan) => {
+        aggColModel.forEach((field) => {
+          if (field[2] === 'sum') {
+            if (field[3] === 'duration') {
+              temp = new moment.duration(opplan[field[1]]).asSeconds();
+              if (temp._d !== 'Invalid Date') {
+                if (aggregatedopplan[field[1]] === null) aggregatedopplan[field[1]] = temp;
+                else aggregatedopplan[field[1]] += temp;
+              }
+            } else if (!isNaN(parseFloat(opplan[field[1]]))) {
+              if (aggregatedopplan[field[1]] === null) {
+                aggregatedopplan[field[1]] = parseFloat(opplan[field[1]]);
+              } else {
+                aggregatedopplan[field[1]] += parseFloat(opplan[field[1]]);
+              }
+            }
+          } else if (field[2] === 'max') {
+            if (
+              ['color', 'number', 'currency'].indexOf(field[3]) !== -1 &&
+              opplan[field[1]] !== ''
+            ) {
+              if (parseFloat(opplan[field[1]])) {
+                if (aggregatedopplan[field[1]] === null) {
+                  aggregatedopplan[field[1]] = parseFloat(opplan[field[1]]);
+                } else {
+                  aggregatedopplan[field[1]] = Math.max(
+                    aggregatedopplan[field[1]],
+                    parseFloat(opplan[field[1]])
+                  );
+                }
+              }
+            } else if (field[3] === 'duration') {
+              temp = new moment.duration(opplan[field[1]]).asSeconds();
+              if (temp._d !== 'Invalid Date') {
+                if (aggregatedopplan[field[1]] === null) {
+                  aggregatedopplan[field[1]] = temp;
+                } else {
+                  aggregatedopplan[field[1]] = Math.max(aggregatedopplan[field[1]], temp);
+                }
+              }
+            } else if (field[3] === 'date') {
+              dateKeys.add(field[1]);
+              temp = new moment(opplan[field[1]], [window.datetimeformat, moment.ISO_8601]);
+              if (temp._d !== 'Invalid Date') {
+                if (aggregatedopplan[field[1]] === null || temp.isAfter(aggregatedopplan[field[1]]))
+                  aggregatedopplan[field[1]] = temp;
+              }
+            }
+          } else if (field[2] === 'min') {
+            if (['color', 'number'].indexOf(field[3]) !== -1 && opplan[field[1]] !== '') {
+              temp = parseFloat(opplan[field[1]]);
+              if (!isNaN(temp)) {
+                if (aggregatedopplan[field[1]] === null) {
+                  aggregatedopplan[field[1]] = temp;
+                } else {
+                  aggregatedopplan[field[1]] = Math.min(aggregatedopplan[field[1]], temp);
+                }
+              }
+            } else if (field[3] === 'duration') {
+              temp = new moment.duration(opplan[field[1]]).asSeconds();
+              if (temp._d !== 'Invalid Date') {
+                if (aggregatedopplan[field[1]] === null) {
+                  aggregatedopplan[field[1]] = temp;
+                } else {
+                  aggregatedopplan[field[1]] = Math.min(aggregatedopplan[field[1]], temp);
+                }
+              }
+            } else if (field[3] === 'date') {
+              dateKeys.add(field[1]);
+              const temp = new moment(opplan[field[1]], [window.datetimeformat, moment.ISO_8601]);
+              if (temp._d !== 'Invalid Date') {
+                if (aggregatedopplan[field[1]] === null) {
+                  aggregatedopplan[field[1]] = temp;
+                } else {
+                  aggregatedopplan[field[1]] = moment.min(aggregatedopplan[field[1]], temp);
+                }
+              }
+            }
+          }
+        });
+      });
+
+      aggregatedopplan.start =
+        aggregatedopplan.startdate || aggregatedopplan.operationplan__startdate;
+      aggregatedopplan.end = aggregatedopplan.enddate || aggregatedopplan.operationplan__enddate;
+      dateKeys.forEach((key) => {
+        if (aggregatedopplan[key] != null && typeof aggregatedopplan[key].format === 'function') {
+          aggregatedopplan[key] = aggregatedopplan[key].format('YYYY-MM-DD[T]HH:mm:ss');
+        }
+      });
+
+      // Aggregate loadplans from selected operationplans
+      const resourceMap = new Map();
+      operationplans.forEach((opplan) => {
+        (opplan.loadplans || []).forEach((lp) => {
+          const name = lp.resource?.name;
+          if (!name) return;
+          if (resourceMap.has(name)) {
+            const existing = resourceMap.get(name);
+            (lp.alternates || []).forEach((alt) => existing.alternates.add(alt.name));
+          } else {
+            const altSet = new Set();
+            (lp.alternates || []).forEach((alt) => altSet.add(alt.name));
+            resourceMap.set(name, {
+              resource: lp.resource,
+              alternates: altSet,
+            });
+          }
+        });
+        // data for resource widget with multi-select
+        const resField = opplan.resource || opplan.resources;
+        if (resField && Array.isArray(resField)) {
+          resField.forEach((item) => {
+            if (!Array.isArray(item) || item.length < 2) return;
+            const name = String(item[0]);
+            if (!name || resourceMap.has(name)) return;
+            resourceMap.set(name, {
+              resource: { name },
+              alternates: new Set(),
+            });
+          });
+        }
+      });
+      aggregatedopplan.loadplans = Array.from(resourceMap.entries())
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([_, entry]) => ({
+          resource: entry.resource,
+          alternates: Array.from(entry.alternates).map((n) => ({ name: n })),
+        }));
+
+      this.operationplan = new Operationplan(aggregatedopplan);
+    },
+
+    async fetchMultiSelectLoadplans(operationplans) {
+      const refs = operationplans
+        .map(op => typeof op === 'string' ? op : (op.reference || op.operationplan__reference))
+        .filter(Boolean);
+
+      const missing = refs.filter(r => !this.multiSelectLoadplans[r]);
+      if (missing.length === 0) return;
+
+      try {
+        const response = await operationplanService.getOperationplanDetailsBatch(missing);
+        const data = response.responseData?.value || response.data || [];
+        data.forEach(op => {
+          if (op.loadplans) {
+            this.multiSelectLoadplans[op.reference] = op.loadplans;
+          }
+        });
+      } catch (err) {
+        console.error('Failed to fetch multi-select loadplans', err);
+      }
+    },
+
+    expandOrCollapse(i, type) {
+      // 0: collapsed, 1: expanded, 2: hidden, 3: leaf node
+      const data =
+        type === 'downstream'
+          ? this.operationplan.downstreamoperationplans
+          : type === 'upstream'
+            ? this.operationplan.upstreamoperationplans
+            : [];
+      let j = i + 1;
+      const myLevel = data[i][0];
+      if (data[i][11] === 0) data[i][11] = 1;
+      else data[i][11] = 0;
+      while (j < data.length) {
+        if (data[j][0] <= myLevel) break;
+        else if (data[j][0] > myLevel + 1 || data[i][11] === 0) data[j][11] = 2;
+        else if (j === data.length - 1 || data[j][0] >= data[j + 1][0]) {
+          if (data[j][12] != null && data[j][12] === data[j + 1][12]) data[j][11] = 1;
+          else data[j][11] = 3;
+        } else if (data[j][0] === myLevel + 1 && data[i][11] === 1) data[j][11] = 0;
+        ++j;
+      }
+    },
+
+    setKanbanCardValue(id, field, statusKey, value) {
+      // Iterate through all columns to find all cards with the same reference
+      for (const columnKey in this.kanbanoperationplans) {
+        const column = this.kanbanoperationplans[columnKey];
+        if (!column || !column.rows) continue;
+
+        const targets = column.rows.filter((x) => x.reference === id);
+
+        targets.forEach((target) => {
+          const targetKeys = Object.keys(target);
+
+          // Determine the correct field name (handling operationplan__ prefix)
+          let newField = targetKeys.includes(field)
+            ? field
+            : field.includes('operationplan__')
+              ? field.replace('operationplan__', '')
+              : 'operationplan__' + field;
+
+          // Special handling for quantity fields based on record type
+          if (['DO', 'MO', 'WO'].includes(target.type)) {
+            if (newField === 'quantity' || newField === 'quantity_completed') {
+              if (
+                ['ResourceDetail', 'InventoryDetail'].includes(
+                  appConfig.reportKey.split('.').pop()
+                ) ||
+                target.type === 'DO'
+              ) {
+                newField = 'operationplan__' + newField.replace('operationplan__', '');
+              }
+            }
+          }
+
+          // Update the value on the card
+          target[newField] = value;
+        });
+      }
+    },
+
+    async setEditFormValues(field, value) {
+      if (!this._editComposable) this._editComposable = useOperationplanEdit(this);
+      return this._editComposable.setEditFormValues(field, value);
+    },
+
+    async shiftGroupDates(field, value) {
+      if (!this._editComposable) this._editComposable = useOperationplanEdit(this);
+      return this._editComposable.shiftGroupDates(field, value);
+    },
+
+    applyGridCellEdit: function ({ reference, field, value }) {
+      const currentRef =
+        this.operationplan?.reference || this.operationplan?.operationplan__reference;
+
+      if (currentRef && reference && String(currentRef) !== String(reference)) {
+        return;
+      }
+
+      this.trackOperationplanChanges(reference, field, value);
+
+      switch (field) {
+        case 'operationplan__quantity':
+          this.operationplan.operationplan__quantity = parseFloat(value);
+          this.operationplan.quantity = parseFloat(value);
+          break;
+        case 'quantity':
+          this.operationplan.quantity = parseFloat(value);
+          break;
+        case 'operationplan__startdate':
+          this.operationplan.operationplan__startdate = value;
+          this.operationplan.start = value;
+          break;
+        case 'startdate':
+          this.operationplan.start = value;
+          break;
+        case 'operationplan__enddate':
+          this.operationplan.operationplan__enddate = value;
+          this.operationplan.end = value;
+          break;
+        case 'enddate':
+          this.operationplan.end = value;
+          break;
+        case 'operationplan__status':
+          this.operationplan.operationplan__status = value;
+          this.operationplan.status = value;
+          break;
+        case 'status':
+          this.operationplan.status = value;
+          break;
+        case 'remark':
+          this.operationplan.remark = value;
+          break;
+        default:
+          this.operationplan[field] = value;
+          break;
+      }
+    },
+
+    trackOperationplanChanges(reference, field, value) {
+      this.operationplanChanges[reference] = this.operationplanChanges[reference] || {};
+
+      if (field === 'quantity' || field === 'operationplan__quantity') {
+        const n = parseFloat(value);
+        const v = isNaN(n) ? value : n;
+        this.operationplanChanges[reference]['operationplan__quantity'] = v;
+        this.operationplanChanges[reference]['quantity'] = v;
+      } else if (
+        field === 'startdate' ||
+        field === 'operationplan__startdate' ||
+        field === 'start'
+      ) {
+        this.operationplanChanges[reference]['operationplan__startdate'] = value;
+        this.operationplanChanges[reference]['start'] = value;
+        this.operationplanChanges[reference]['startdate'] = value;
+      } else if (field === 'enddate' || field === 'operationplan__enddate' || field === 'end') {
+        this.operationplanChanges[reference]['operationplan__enddate'] = value;
+        this.operationplanChanges[reference]['end'] = value;
+        this.operationplanChanges[reference]['enddate'] = value;
+      } else {
+        this.operationplanChanges[reference][field] = value;
+      }
+      window.operationplanChanges = toRaw(this.operationplanChanges);
+    },
+  },
+});

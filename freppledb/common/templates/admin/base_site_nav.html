@@ -1,0 +1,183 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block extrahead %}{{block.super}}{% if not 'navbar' in request.session or request.session.navbar %}
+<script>
+$(function() {
+  breadcrumbs_reflow();
+  $(window).resize(breadcrumbs_reflow);
+});
+
+</script>
+{% endif %}{% endblock %}
+
+{% block nav-global %}{% if not 'navbar' in request.session or request.session.navbar %}
+{% getMenu as menu %}
+<nav id="nav-menu-header" class="navbar navbar-expand-lg navbar-light bg-light">
+	<div class="container-fluid">
+
+          {% if not request.session.navbar or request.session.branding %}
+	      <a href="{{request.prefix}}/" class="navbar-brand">
+          {% block branding %}{{ block.super }}{% endblock %}
+          </a>
+          {% endif %}
+
+		  <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nav-menu" aria-controls="nav-menu" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+          </button>
+
+		<div id="nav-menu" class="collapse navbar-collapse">
+			<div class="float-end ms-3 d-lg-none">
+			    <div class="d-flex justify-content-around align-items-center mt-3">
+					<div>
+						<a class="position-relative nav-link" href="{{request.prefix}}/inbox/">
+							<i id="messages" style="font-size: 1.5em" class="fa fa-envelope-open-o" aria-hidden="true"></i>
+							<span class="position-absolute top-20 start-50 translate-middle badge rounded-pill bg-danger" aria-hidden="true"></span>
+						</a>
+					</div>
+					<div>
+				        <a href="{{request.prefix}}/preferences/" class="nav-link">
+							{% if user.avatar %}<img src="{{ user.avatar.url }}" class="avatar-sm">
+							{% else %}<i style="font-size: 1.5em" class="fa fa-user-circle-o"></i>
+							{% endif %}
+						</a>
+					</div>
+					<div>
+				        <form method="post" action="/data/logout/" class="d-inline">
+				          {% csrf_token %}
+				          <button type="submit" class="nav-link border-0 bg-transparent p-0">
+				            <i style="font-size: 1.5em" class="fa fa-sign-out"></i>
+				          </button>
+				        </form>
+					</div>
+				</div>
+			<form class="navbar-form me-start mt-3 mb-3" role="search">
+				<div class="form-group" style="width: 12em">
+				  <input class="form-control typeahead search-input" type="text" placeholder="&#xf002; {% trans 'Search' %}">
+				</div>
+			</form>
+			<ul class="nav navbar-nav ms-auto" class="selectdb">
+				{% if user.scenarios|length > 1 %}
+				   <li class="navbar-item dropdown">
+					<a href="#" class="dropdown-toggle form-control pe-3" data-bs-toggle="dropdown"
+          			   role="button" aria-haspopup="true" aria-expanded="false" id="database" name="{{ request.scenario.name }}">
+					<span data-bs-toggle="tooltip" data-bs-delay='{"show":2000, "hide":4000}' data-bs-placement="left"
+					  data-bs-title="{% trans "Select a what-if scenario.<br>Click <a class='text-decoration-underline' href='/execute/#scenario_copy'>here</a> to manage scenarios." %}"
+					  data-bs-html="true">
+						{{ request.scenario.description }}
+					</span>
+					</a>
+					<ul class="dropdown-menu dropdown-menu-end">
+					{% for sc in user.scenarios|sortList %}<li>
+					  <a class="dropdown-item" data-database="{{ sc.name }}" onclick="selectDatabase(event.target)">{{ sc.tag }}
+					  {% if sc.help_url %}
+					  <span onclick="window.open('{{sc.help_url|safe}}'); event.stopPropagation()" style="float:right" class="fa fa-question-circle"></span>
+					  {% endif %}</a>
+					  </li>{% endfor %}
+					</ul>
+				    </li>
+				{% endif %}
+				</ul>
+			</div>
+			<ul class="navbar-nav">
+			  {% for group in menu %}{% if group.2 %}
+			  <li class="nav-item dropdown">
+			    <a class="nav-link text-nowrap" id="nav-{{ group.0 }}" data-bs-toggle="dropdown" role="button" aria-expanded="false">{{ group.0 }}</a>
+			    <ul class="dropdown-menu" aria-labelledby="nav-{{ group.0 }}">
+			      {% for item in group.1 %}
+			        {% if item.4 %}
+			        {% if item.1.separator %}<li role="separator" class="dropdown-divider"></li>
+			        {% else %}<li><a class="dropdown-item text-nowrap" {% if item.1.identifier %}id="{{item.1.identifier}}" {% endif %}{% if item.1.window %}target="_blank" rel="noopener" {% endif %}{% if item.1.javascript %}href="javascript:void(0);" onclick="{{ item.1.javascript }}; return false;"{% else %}href="{% if item.1.prefix %}{{request.prefix}}{% endif %}{{ item.1.url }}"{% endif %} data-populated="{{ item.3 }}">{{ item.0 }}</a></li>
+			        {% endif %}
+			        {% endif %}
+			      {% endfor %}
+			    </ul>
+			  </li>{% endif %}
+			  {% endfor %}
+			</ul>
+			<form class="navbar-form me-start mt-3 mb-3 d-none d-lg-block" role="search">
+				<div class="form-group" style="width: 12em">
+				  <input class="form-control typeahead search-input" type="text" placeholder="&#xf002; {% trans 'Search' %}">
+				</div>
+			</form>
+
+      {% if user.is_authenticated and user.is_staff %}
+	  <div id="nav-menu-end" class="collapse navbar-collapse">
+	  {% if not request.session.navbar or request.session.branding %}
+      <ul class="nav navbar-nav ms-auto">
+        {% block extra_user_context %}{% endblock %}
+        <li class="navbar-item" data-bs-toggle="tooltip" data-bs-html="true" data-bs-placement="bottom"
+          style="position:relative" data-bs-title="{% trans "No unread messages" %}" data-bs-offset="0,7">
+          <a class="nav-link" href="{{request.prefix}}/inbox/">
+            <i id="messages" style="font-size: 1.5em" class="fa fa-envelope-open-o" aria-hidden="true"></i>
+            <span class="position-absolute top-20 start-50 translate-middle badge rounded-pill bg-danger" aria-hidden="true"></span>
+            &nbsp;&nbsp;
+          </a>
+        </li>
+		<li class="navbar-item dropdown">
+		    <a href="#" class="nav-link dropdown-toggle pe-3" data-bs-toggle="dropdown"
+          role="button" aria-haspopup="true" aria-expanded="false">
+          {% if user.avatar %}<img src="{{ user.avatar.url }}" class="avatar-sm">
+          {% else %}<i style="font-size: 1.5em" class="fa fa-user-circle-o"></i>
+          {% endif %}
+          {% firstof user.first_name user.username %}
+        </a>
+				<ul class="dropdown-menu dropdown-menu-end" style="right: 0 !important; left: auto !important">
+				  <li><a class="dropdown-item" href="{{request.prefix}}/preferences/">{% trans 'preferences'|capfirst %}</a></li>
+				  <li>
+				    <form method="post" action="/data/logout/" class="m-0">
+				      {% csrf_token %}
+				      <button type="submit" class="dropdown-item">{% trans 'Log out'|capfirst %}</button>
+				    </form>
+				  </li>
+				</ul>
+			  </li>
+      </ul>
+	{% else %}
+	<div class="nav navbar-nav ms-auto">
+		<a class="nav-link" href="{{request.prefix}}/preferences/" data-bs-toggle="tooltip"
+		data-bs-title="{% trans 'preferences'|capfirst %}"><span class="fa fa-gear fa-2x"></span></a>
+	</div>
+	{% endif %}
+	</div>
+          {% endif %}
+		</div>
+  </div>
+</nav>
+
+<nav id="nav-breadcrumb-header" class="navbar navbar-expand-lg d-none d-lg-block navbar-light bg-light pt-0">
+	<div class="container-fluid">
+	  <div class="breadcrumbrow row align-items-center" aria-label="breadcrumb">
+		  <div class="col flex-grow-1">
+		     <ol class="breadcrumb mb-0" id="breadcrumbs">
+		       <li id="cockpitcrumb" class="breadcrumb-item"><a href="{{request.prefix}}/">{% trans 'home'|capfirst %}</a></li>
+		       {% crumbs %}
+		     </ol>
+		  </div>
+		</div>
+
+			<ul class="nav navbar-nav ms-auto" class="selectdb">
+				{% if user.scenarios|length > 1 %}
+				   <li class="navbar-item dropdown">
+					<a href="#" class="dropdown-toggle form-control pe-3" data-bs-toggle="dropdown"
+          			   role="button" aria-haspopup="true" aria-expanded="false" id="database" name="{{ request.scenario.name }}">
+					<span data-bs-toggle="tooltip" data-bs-delay='{"show":2000, "hide":4000}' data-bs-placement="left"
+					  data-bs-title="{% trans "Select a what-if scenario.<br>Click <a class='text-decoration-underline' href='/execute/#scenario_copy'>here</a> to manage scenarios." %}"
+					  data-bs-html="true">{{ request.scenario.tag }}</span>
+					</a>
+					<ul class="dropdown-menu dropdown-menu-end">
+					{% for sc in user.scenarios|sortList %}<li>
+					  <a class="dropdown-item" data-database="{{ sc.name }}" onclick="selectDatabase(event.target)">{{ sc.tag }}
+					  {% if sc.help_url %}
+					  <span onclick="window.open('{{sc.help_url|safe}}'); event.stopPropagation()" style="float:right" class="fa fa-question-circle"></span>
+					  {% endif %}</a>
+					  </li>{% endfor %}
+					</ul>
+				    </li>
+				{% endif %}
+				</ul>
+	  </div>
+
+</nav>
+
+{% endif %}{% endblock %}
